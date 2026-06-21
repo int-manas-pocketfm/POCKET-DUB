@@ -1,0 +1,427 @@
+"""
+DubStudio — FastAPI backend
+Manages projects, runs pipeline stages, streams logs via SSE.
+"""
+
+import asyncio
+import json
+import queue
+import threading
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import uvicorn
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from sse_starlette.sse import EventSourceResponse
+
+import os
+
+BASE_DIR = Path(__file__).parent
+# Vercel has a read-only filesystem except /tmp
+OUTPUT_DIR = Path("/tmp/dubstudio") if os.getenv("VERCEL") else BASE_DIR / "output"
+OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
+
+app = FastAPI(title="DubStudio", version="1.0.0")
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+
+# In-memory job state per project
+# { project_name: { "status": "idle"|"running"|"done"|"error", "stage": int|None, "queue": Queue } }
+_jobs: dict[str, dict] = {}
+
+LANG_NAMES = {
+    "de": "German",
+    "fr": "French",
+    "it": "Italian",
+    "es": "Spanish",
+    "pt": "Portuguese",
+}
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _project_dir(name: str) -> Path:
+    d = OUTPUT_DIR / name
+    if not d.exists():
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+    return d
+
+
+def _load_json(path: Path) -> dict | list | None:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        try:
+            return json.loads(path.read_text(encoding="latin-1"))
+        except Exception:
+            return None
+
+
+def _load_metadata(name: str) -> dict:
+    d = _project_dir(name)
+    meta = _load_json(d / "metadata.json")
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Project metadata not found")
+    return meta
+
+
+def _ensure_job(name: str) -> dict:
+    if name not in _jobs:
+        _jobs[name] = {"status": "idle", "stage": None, "queue": queue.Queue()}
+    return _jobs[name]
+
+
+def _run_in_thread(fn, name: str, stage: int, *args):
+    job = _ensure_job(name)
+    job["status"] = "running"
+    job["stage"] = stage
+
+    def log(msg: str):
+        job["queue"].put({"type": "log", "message": msg})
+
+    def worker():
+        try:
+            fn(*args, log_fn=log)
+            job["status"] = "done"
+            job["queue"].put({"type": "done", "message": f"Stage {stage} complete"})
+        except Exception as exc:
+            job["status"] = "error"
+            job["queue"].put({"type": "error", "message": str(exc)})
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def _stage_flags(d: Path, meta: dict) -> dict:
+    lang = meta.get("target_lang", "de")
+    trans = _load_json(d / "translations.json") or {}
+
+    has_local = any(
+        f"llm_{lang}_local" in v or f"google_{lang}_local" in v
+        for v in trans.values()
+    )
+    dub = _load_json(d / "dub_state.json") or {}
+    tts_done = bool(dub) and all(s.get("status") == "done" for s in dub.values())
+    final_videos = list(d.glob(f"*_{lang}.mp4"))
+
+    return {
+        "stage1_done": (d / "translations.json").exists(),
+        "stage2_done": has_local,
+        "stage3_done": tts_done,
+        "stage4_done": bool(final_videos),
+    }
+
+
+# ── Routes: serve frontend ─────────────────────────────────────────────────────
+
+@app.get("/")
+async def index():
+    return FileResponse(BASE_DIR / "static" / "index.html")
+
+
+# ── Routes: projects ───────────────────────────────────────────────────────────
+
+@app.get("/api/projects")
+async def list_projects():
+    result = []
+    for d in sorted(OUTPUT_DIR.iterdir()):
+        if not d.is_dir():
+            continue
+        meta = _load_json(d / "metadata.json")
+        if meta is None:
+            continue
+        flags = _stage_flags(d, meta)
+        result.append({**meta, **flags})
+    return result
+
+
+@app.post("/api/projects")
+async def create_project(
+    name: str = Form(...),
+    target_lang: str = Form(...),
+    video: UploadFile = File(...),
+):
+    project_dir = OUTPUT_DIR / name
+    if project_dir.exists():
+        raise HTTPException(status_code=400, detail=f"Project '{name}' already exists")
+
+    project_dir.mkdir(parents=True)
+
+    video_path = project_dir / video.filename
+    with open(video_path, "wb") as f:
+        f.write(await video.read())
+
+    meta = {
+        "name": name,
+        "video_path": str(video_path),
+        "video_filename": video.filename,
+        "target_lang": target_lang,
+        "target_lang_name": LANG_NAMES.get(target_lang, target_lang),
+        "source_lang": "en",
+        "fps": 25,
+        "created_at": datetime.now().isoformat(),
+    }
+    (project_dir / "metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return meta
+
+
+@app.get("/api/projects/{name}")
+async def get_project(name: str):
+    d = _project_dir(name)
+    meta = _load_metadata(name)
+    flags = _stage_flags(d, meta)
+
+    job = _jobs.get(name, {})
+    return {
+        **meta,
+        **flags,
+        "job_status": job.get("status", "idle"),
+        "job_stage": job.get("stage"),
+    }
+
+
+@app.delete("/api/projects/{name}")
+async def delete_project(name: str):
+    import shutil
+    d = _project_dir(name)
+    shutil.rmtree(d)
+    if name in _jobs:
+        del _jobs[name]
+    return {"status": "deleted"}
+
+
+# ── Routes: stage execution ────────────────────────────────────────────────────
+
+def _assert_idle(name: str):
+    job = _jobs.get(name, {})
+    if job.get("status") == "running":
+        raise HTTPException(status_code=400, detail="A stage is already running for this project")
+
+
+@app.post("/api/projects/{name}/stage1")
+async def run_stage1(name: str):
+    meta = _load_metadata(name)
+    _assert_idle(name)
+    _ensure_job(name)
+
+    from pipeline import run_stage1 as _run_stage1
+    _run_in_thread(
+        _run_stage1, name, 1,
+        meta["video_path"],
+        OUTPUT_DIR / name,
+        meta["target_lang"],
+    )
+    return {"status": "started", "stage": 1}
+
+
+@app.post("/api/projects/{name}/stage2")
+async def run_stage2(name: str, localization_csv: UploadFile = File(...)):
+    meta = _load_metadata(name)
+    _assert_idle(name)
+
+    d = OUTPUT_DIR / name
+    csv_path = d / "localization.csv"
+    with open(csv_path, "wb") as f:
+        f.write(await localization_csv.read())
+
+    _ensure_job(name)
+    from translate import run_stage2_localize
+    _run_in_thread(run_stage2_localize, name, 2, d, csv_path, meta["target_lang"])
+    return {"status": "started", "stage": 2}
+
+
+@app.post("/api/projects/{name}/stage2/inline")
+async def run_stage2_inline(name: str, request: Request):
+    meta = _load_metadata(name)
+    _assert_idle(name)
+
+    body = await request.json()
+    replacements = body.get("replacements", [])
+    if not replacements:
+        raise HTTPException(status_code=400, detail="No replacements provided")
+
+    import csv as _csv
+    d = OUTPUT_DIR / name
+    csv_path = d / "localization.csv"
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        w = _csv.writer(f)
+        w.writerow(["Original", "Localized"])
+        for r in replacements:
+            if r.get("original") and r.get("localized"):
+                w.writerow([r["original"], r["localized"]])
+
+    _ensure_job(name)
+    from translate import run_stage2_localize
+    _run_in_thread(run_stage2_localize, name, 2, d, csv_path, meta["target_lang"])
+    return {"status": "started", "stage": 2}
+
+
+@app.post("/api/projects/{name}/stage3")
+async def run_stage3(name: str, request: Request):
+    meta = _load_metadata(name)
+    _assert_idle(name)
+
+    body = await request.json()
+    voice_config: dict = body.get("voice_config", {})
+    if not voice_config:
+        raise HTTPException(status_code=400, detail="voice_config is required (character → ElevenLabs voice ID)")
+
+    d = OUTPUT_DIR / name
+    _ensure_job(name)
+    from dub import run_stage3_tts
+    _run_in_thread(run_stage3_tts, name, 3, d, meta["target_lang"], voice_config)
+    return {"status": "started", "stage": 3}
+
+
+@app.post("/api/projects/{name}/stage4")
+async def run_stage4(name: str):
+    meta = _load_metadata(name)
+    _assert_idle(name)
+
+    d = OUTPUT_DIR / name
+    _ensure_job(name)
+    from dub import run_stage4_stitch
+    _run_in_thread(run_stage4_stitch, name, 4, d, meta["target_lang"])
+    return {"status": "started", "stage": 4}
+
+
+# ── Routes: log streaming (SSE) ────────────────────────────────────────────────
+
+@app.get("/api/projects/{name}/logs")
+async def stream_logs(name: str, request: Request):
+    job = _ensure_job(name)
+    q = job["queue"]
+
+    async def generator():
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                msg = q.get_nowait()
+                yield {"data": json.dumps(msg)}
+                if msg.get("type") in ("done", "error"):
+                    break
+            except queue.Empty:
+                await asyncio.sleep(0.1)
+
+    return EventSourceResponse(generator())
+
+
+# ── Routes: segments & translations ───────────────────────────────────────────
+
+@app.get("/api/projects/{name}/segments")
+async def get_segments(name: str):
+    d = _project_dir(name)
+
+    raw = _load_json(d / "segments.json")
+    if raw is None:
+        return []
+    segments = raw.get("merged", raw.get("segments", raw)) if isinstance(raw, dict) else raw
+
+    translations = _load_json(d / "translations.json") or {}
+    characters = _load_json(d / "characters_final.json") or {}
+    dub_state = _load_json(d / "dub_state.json") or {}
+
+    result = []
+    for i, seg in enumerate(segments):
+        sid = str(i)
+        char = "?"
+        for src_id in seg.get("source_ids", [i]):
+            if str(src_id) in characters:
+                char = characters[str(src_id)]
+                break
+        result.append({
+            "id": i,
+            "start": seg["start"],
+            "end": seg["end"],
+            "text": seg.get("text", ""),
+            "character": char,
+            "translations": translations.get(sid, {}),
+            "dub": dub_state.get(sid, {}),
+        })
+    return result
+
+
+@app.put("/api/projects/{name}/segments/{seg_id}")
+async def update_segment(name: str, seg_id: int, request: Request):
+    d = _project_dir(name)
+    trans_path = d / "translations.json"
+    if not trans_path.exists():
+        raise HTTPException(status_code=404, detail="No translations found — run Stage 1 first")
+
+    body = await request.json()
+    translations = json.loads(trans_path.read_text())
+    sid = str(seg_id)
+    if sid not in translations:
+        translations[sid] = {}
+    translations[sid].update(body.get("translations", {}))
+    trans_path.write_text(json.dumps(translations, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"status": "updated"}
+
+
+@app.post("/api/projects/{name}/segments/{seg_id}/regenerate-tts")
+async def regenerate_tts(name: str, seg_id: int):
+    meta = _load_metadata(name)
+    _assert_idle(name)
+
+    d = OUTPUT_DIR / name
+    dub_path = d / "dub_state.json"
+    if not dub_path.exists():
+        raise HTTPException(status_code=404, detail="No dub state — run Stage 3 first")
+
+    # Mark segment as pending so Stage 3 will re-process it
+    dub_state = json.loads(dub_path.read_text())
+    dub_state[str(seg_id)] = {"status": "pending"}
+    dub_path.write_text(json.dumps(dub_state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # Load voice config from last run or raise
+    vc_path = d / "voice_config.json"
+    if not vc_path.exists():
+        raise HTTPException(status_code=400, detail="voice_config.json not found — re-run Stage 3 first")
+    voice_config = json.loads(vc_path.read_text())
+
+    _ensure_job(name)
+    from dub import run_stage3_tts
+    _run_in_thread(run_stage3_tts, name, 3, d, meta["target_lang"], voice_config)
+    return {"status": "started", "segment": seg_id}
+
+
+# ── Routes: file access ────────────────────────────────────────────────────────
+
+@app.get("/api/projects/{name}/files/{filename:path}")
+async def get_file(name: str, filename: str):
+    d = _project_dir(name)
+    path = d / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"File '{filename}' not found")
+    return FileResponse(path)
+
+
+@app.get("/api/projects/{name}/characters")
+async def get_characters(name: str):
+    d = _project_dir(name)
+    for fname in ("characters_final.json", "characters_llm.json"):
+        data = _load_json(d / fname)
+        if data:
+            from collections import Counter
+            counts = Counter(data.values())
+            return {"characters": dict(counts), "map": data}
+    return {"characters": {}, "map": {}}
+
+
+@app.get("/api/projects/{name}/dub-state")
+async def get_dub_state(name: str):
+    d = _project_dir(name)
+    dub = _load_json(d / "dub_state.json")
+    if dub is None:
+        return {}
+    return dub
+
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    uvicorn.run("server:app", host="0.0.0.0", port=8501, reload=True)

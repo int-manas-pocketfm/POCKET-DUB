@@ -1,0 +1,17 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+*.log
+hf_token.txt
+
+# Project output (large video/audio files)
+output/**/*
+!output/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db

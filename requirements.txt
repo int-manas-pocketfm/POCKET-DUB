@@ -1,0 +1,18 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+anthropic
+deep-translator
+faster-whisper
+edge-tts
+numpy
+pydub
+openpyxl
+sse-starlette
+python-multipart
+aiofiles
+
+# Optional: for Pyannote speaker diarization (requires CUDA recommended)
+# torch
+# torchaudio
+# pyannote.audio

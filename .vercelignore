@@ -1,0 +1,10 @@
+output/**/*
+!output/.gitkeep
+__pycache__/
+*.pyc
+.env
+*.mp4
+*.mp3
+*.wav
+*.log
+hf_token.txt
