@@ -614,7 +614,7 @@ def write_stage3_review_doc(
     return out_path
 
 
-def _style_cell(cell, font_size, font_color: RGBColor, bg_hex: str, bold_first=False):
+def _style_cell(cell, font_size, font_color, bg_hex: str, bold_first=False):
     _set_cell_bg(cell, bg_hex)
     for i, para in enumerate(cell.paragraphs):
         para.paragraph_format.space_before = Pt(2)
