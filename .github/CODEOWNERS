@@ -1,0 +1,15 @@
+# Global owner — reviews required on all PRs
+* @int-manas-pocketfm
+
+# Pipeline core
+server.py     @int-manas-pocketfm
+dub.py        @int-manas-pocketfm
+translate.py  @int-manas-pocketfm
+pipeline.py   @int-manas-pocketfm
+
+# Frontend
+static/       @int-manas-pocketfm
+
+# Infrastructure
+Dockerfile              @int-manas-pocketfm
+.github/workflows/      @int-manas-pocketfm

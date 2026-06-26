@@ -10,14 +10,12 @@ import time
 from pathlib import Path
 from typing import Callable
 
-import anthropic
+from argus import make_client
 from dotenv import load_dotenv
 
 load_dotenv()
 
-ARGUS_API_KEY = os.getenv("ARGUS_API_KEY")
-ARGUS_BASE_URL = os.getenv("ARGUS_BASE_URL", "https://api.anthropic.com")
-ARGUS_MODEL = os.getenv("ARGUS_MODEL", "claude-opus-4-5")
+ARGUS_MODEL = os.getenv("ARGUS_MODEL", "claude-sonnet-4-6")
 
 LLM_BATCH_SIZE = 80
 TIEBREAK_BATCH = 20
@@ -30,7 +28,7 @@ def detect_llm(segments: list, log_fn: Callable) -> dict:
     Ask the LLM to label each segment with a character name.
     Returns dict: { "0": "NARRATOR", "1": "ALICE", ... }
     """
-    client = anthropic.Anthropic(api_key=ARGUS_API_KEY, base_url=ARGUS_BASE_URL)
+    client = make_client()
     characters: dict[str, str] = {}
     n = len(segments)
     n_batches = (n + LLM_BATCH_SIZE - 1) // LLM_BATCH_SIZE
@@ -44,12 +42,15 @@ def detect_llm(segments: list, log_fn: Callable) -> dict:
         lines = [f"{start + i}: {seg.get('text', '')}" for i, seg in enumerate(batch)]
 
         prompt = (
-            "Label each dialogue segment with its speaker.\n\n"
+            "Label each segment with its speaker.\n\n"
             "Rules:\n"
-            "- Third-person narration or descriptive prose → NARRATOR\n"
-            "- A character speaking aloud → THEIR_NAME (uppercase, consistent)\n"
-            "- Internal monologue / voice-over → THEIR_NAME_VO\n"
-            "- Unknown / ambiguous → UNKNOWN\n\n"
+            "- Third-person narration, descriptive prose, documentary voice-over, or any text "
+            "that is NOT clearly a named character speaking → NARRATOR\n"
+            "- A named character speaking aloud → THEIR_NAME (uppercase, e.g. ALICE)\n"
+            "- A named character's internal monologue → THEIR_NAME_VO\n"
+            "- UNKNOWN is ONLY for dialogue where two or more named characters could be the "
+            "speaker and you genuinely cannot tell — do NOT use it for narration.\n"
+            "- When in doubt, default to NARRATOR.\n\n"
             f'Return ONLY a JSON object: {{"0": "NARRATOR", "1": "ALICE", ...}}\n\n'
             "Segments:\n" + "\n".join(lines)
         )
@@ -76,6 +77,13 @@ def detect_llm(segments: list, log_fn: Callable) -> dict:
                 characters[str(i)] = "UNKNOWN"
 
         time.sleep(0.3)
+
+    # If the majority of segments are UNKNOWN, it's a narration-only video.
+    # UNKNOWN is useless for TTS (can't assign a voice to it), so fall back to NARRATOR.
+    unknown_count = sum(1 for v in characters.values() if v == "UNKNOWN")
+    if unknown_count > len(characters) * 0.5:
+        log_fn(f"    {unknown_count}/{len(characters)} segments are UNKNOWN — treating all as NARRATOR.")
+        characters = {k: ("NARRATOR" if v == "UNKNOWN" else v) for k, v in characters.items()}
 
     return characters
 
@@ -145,7 +153,7 @@ def reconcile(
     - One side is UNKNOWN → use the other
     - Both confident but different → ask LLM with context to tiebreak
     """
-    client = anthropic.Anthropic(api_key=ARGUS_API_KEY, base_url=ARGUS_BASE_URL)
+    client = make_client()
     final: dict[str, str] = {}
     disagreements: list[int] = []
 

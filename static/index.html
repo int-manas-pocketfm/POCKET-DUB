@@ -7,66 +7,77 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
     [x-cloak] { display: none !important; }
 
     :root {
-      --bg:       #0d0d1a;
-      --surface:  #16162a;
-      --raised:   #1e1e35;
-      --border:   #2a2a45;
-      --border2:  #353558;
-      --text:     #e8e6f0;
-      --muted:    #8a87a0;
-      --dim:      #5a5870;
+      --bg:       #080812;
+      --surface:  #0f0f1e;
+      --raised:   #161628;
+      --border:   #1e1e38;
+      --border2:  #282845;
+      --text:     #ece9f8;
+      --muted:    #7e7a9a;
+      --dim:      #4a4868;
       --orange:   #ff6b35;
-      --orange-h: #ff8c5a;
+      --orange-h: #ff8555;
       --orange-d: #cc4f1e;
       --green:    #22c55e;
       --red:      #ef4444;
       --amber:    #f59e0b;
+      --blue:     #4f9eff;
+      /* glow shorthands */
+      --glow-o:   rgba(255, 107, 53, 0.45);
+      --glow-o-sm: rgba(255, 107, 53, 0.18);
+      --glow-g:   rgba(34, 197, 94, 0.4);
+      --glow-r:   rgba(239, 68, 68, 0.4);
+      --glow-b:   rgba(79, 158, 255, 0.35);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+    body {
+      background: var(--bg);
+      background-image:
+        radial-gradient(ellipse 60% 40% at 15% 5%,  rgba(255,107,53,.055) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 35% at 85% 95%, rgba(79,158,255,.04)  0%, transparent 55%);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
 
     /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
 
     /* ── App shell ── */
     #app-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
     /* ── Nav bar ── */
     .nav-bar {
-      background: var(--surface); border-bottom: 1px solid var(--border);
+      background: rgba(8, 8, 18, 0.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(255, 107, 53, 0.12);
       display: flex; align-items: center; gap: 10px;
-      padding: 0 18px; height: 44px; flex-shrink: 0;
+      padding: 0 20px; height: 46px; flex-shrink: 0;
+      position: relative;
     }
-    .nav-div { width: 1px; height: 16px; background: var(--border); }
-
-    /* ── Stat boxes (FRAMES-style) ── */
-    .stat-bar {
-      display: grid; grid-template-columns: repeat(4, 1fr);
-      border-bottom: 1px solid var(--border);
-      background: var(--bg); flex-shrink: 0;
+    .nav-bar::after {
+      content: '';
+      position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,107,53,.25) 30%, rgba(255,107,53,.25) 70%, transparent);
+      pointer-events: none;
     }
-    .stat-box {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: .85rem 1rem; gap: 5px;
-      border-right: 1px solid var(--border);
-    }
-    .stat-box:last-child { border-right: none; }
-    .stat-lbl { font-size: 9.5px; font-weight: 700; color: var(--dim); letter-spacing: .12em; text-transform: uppercase; }
-    .stat-val { font-size: 1.55rem; font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); line-height: 1; }
+    .nav-div { width: 1px; height: 16px; background: var(--border2); }
 
     /* ── Content area ── */
     .content-area { flex: 1; overflow: hidden; position: relative; }
 
-    /* ── Scrollable views (home / create) ── */
-    .scroll-view {
-      position: absolute; inset: 0; overflow-y: auto;
-    }
+    /* ── Scrollable views ── */
+    .scroll-view { position: absolute; inset: 0; overflow-y: auto; }
     .page-wrap { max-width: 860px; margin: 0 auto; padding: 2.5rem 1.5rem; }
 
     /* ── Project view ── */
@@ -84,16 +95,21 @@
     }
     .tab-btn {
       padding: .55rem .95rem; font-size: .81rem; font-weight: 600;
-      background: none; border: none; cursor: pointer; transition: color .15s;
-      display: flex; align-items: center; gap: 4px;
+      background: none; border: none; cursor: pointer;
+      transition: color .15s, text-shadow .15s;
+      display: flex; align-items: center; gap: 5px;
+      border-bottom: 2px solid transparent;
     }
-    .tab-active { color: var(--orange); border-bottom: 2px solid var(--orange); }
-    .tab-inactive { color: var(--muted); border-bottom: 2px solid transparent; }
+    .tab-active {
+      color: var(--orange);
+      border-bottom: 2px solid var(--orange);
+      text-shadow: 0 0 10px var(--glow-o);
+    }
+    .tab-inactive { color: var(--muted); }
     .tab-inactive:hover { color: var(--text); }
 
-    /* ── Stage content: two-col or cue sheet ── */
+    /* ── Stage area ── */
     .stage-area { flex: 1; display: flex; overflow: hidden; }
-
     .two-col { display: flex; flex: 1; overflow: hidden; }
     .left-panel {
       width: 290px; min-width: 290px; flex-shrink: 0;
@@ -103,78 +119,455 @@
     }
     .center-panel {
       flex: 1; min-width: 0; overflow-y: auto;
-      padding: 1.1rem 1.25rem; background: var(--raised);
+      display: flex; flex-direction: column;
+      background: var(--raised);
     }
+    .center-stats { padding: .85rem 1rem .65rem; flex-shrink: 0; }
+    .center-log   { flex: 1; min-height: 320px; overflow: hidden; display: flex; flex-direction: column; padding: 0 1rem 1rem; }
+    .log-body     { flex: 1; overflow-y: auto; padding: .65rem .8rem; }
     .cue-sheet-panel { flex: 1; overflow-y: auto; padding: 1.1rem 1.25rem; }
 
-    /* ── Logs ── */
-    .log-line { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: .74rem; line-height: 1.7; }
-    .log-empty {
+    /* ── Log terminal ── */
+    .log-terminal {
+      background: #05050e;
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      overflow: hidden;
+      flex: 1; display: flex; flex-direction: column;
+      box-shadow: 0 4px 24px rgba(0,0,0,.4), inset 0 0 60px rgba(255,107,53,.012);
+    }
+    .log-chrome {
+      background: rgba(255,255,255,.025);
+      border-bottom: 1px solid var(--border);
+      padding: .52rem .9rem;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .log-dots { display: flex; gap: 5px; }
+    .log-dot { width: 9px; height: 9px; border-radius: 50%; }
+    /* .log-body sizing is set by .center-log flex context — see above */
+    .log-entry {
+      display: flex; align-items: baseline; gap: 9px;
+      padding: .14rem .3rem; border-radius: 4px;
+      animation: log-fadein .18s ease;
+      transition: background .12s;
+    }
+    .log-entry:hover { background: rgba(255,255,255,.018); }
+    .log-num {
+      font-size: .6rem; color: var(--dim); min-width: 22px; text-align: right;
+      flex-shrink: 0; user-select: none;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+    }
+    .log-icon { flex-shrink: 0; font-size: .7rem; width: 14px; text-align: center; user-select: none; }
+    .log-msg {
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: .73rem; line-height: 1.65; flex: 1; word-break: break-word;
+    }
+
+    /* ── Log line type variants ── */
+    .log-type-info .log-msg    { color: #7a7896; }
+    .log-type-step .log-msg    { color: #c8c5dc; font-weight: 500; }
+    .log-type-ok .log-msg      { color: #4ade80; }
+    .log-type-warn .log-msg    { color: #fbbf24; }
+    .log-type-error            { background: rgba(239,68,68,.05); border-radius: 4px; }
+    .log-type-error .log-msg   { color: #f87171; }
+    .log-type-done             { background: rgba(34,197,94,.05); margin-top: .35rem; }
+    .log-type-done .log-msg    { color: #4ade80; font-weight: 600; }
+    .log-type-section {
+      background: rgba(255,107,53,.05);
+      border-left: 2px solid rgba(255,107,53,.45);
+      padding-left: .45rem; margin: .45rem 0 .2rem;
+    }
+    .log-type-section .log-msg { color: #ff8a5f; font-weight: 600; letter-spacing: .03em; }
+
+    @keyframes log-fadein {
+      from { opacity: 0; transform: translateX(-6px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ── Recording dot ── */
+    @keyframes rec-blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+    .rec-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 6px rgba(239,68,68,.8);
+      animation: rec-blink 1.2s ease-in-out infinite;
+    }
+
+    .log-empty-state {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: 5rem 2rem; color: var(--dim); text-align: center;
+      padding: 3.5rem 2rem; color: var(--dim); text-align: center; gap: 8px;
     }
 
     /* ── Cards ── */
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
-    .card-raised { background: var(--raised); border: 1px solid var(--border2); border-radius: 10px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .card-raised { background: var(--raised); border: 1px solid var(--border2); border-radius: 12px; }
 
     /* ── Buttons ── */
     .btn-primary {
-      background: var(--orange); color: #fff; border: none; border-radius: 7px;
-      padding: .45rem 1.1rem; font-size: .84rem; font-weight: 600; cursor: pointer;
-      transition: background .15s; display: inline-block;
+      background: linear-gradient(135deg, #ff6b35, #e85520);
+      color: #fff; border: none; border-radius: 8px;
+      padding: .47rem 1.15rem; font-size: .84rem; font-weight: 600; cursor: pointer;
+      transition: box-shadow .2s, transform .1s, background .2s;
+      display: inline-block;
+      box-shadow: 0 2px 12px rgba(255, 107, 53, 0.3), 0 1px 3px rgba(0,0,0,.4);
     }
-    .btn-primary:hover:not(:disabled) { background: var(--orange-h); }
-    .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary:hover:not(:disabled) {
+      background: linear-gradient(135deg, #ff8050, #ff6b35);
+      box-shadow: 0 0 18px var(--glow-o), 0 0 36px rgba(255,107,53,.18), 0 2px 4px rgba(0,0,0,.3);
+      transform: translateY(-1px);
+    }
+    .btn-primary:active:not(:disabled) { transform: translateY(0); }
+    .btn-primary:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
+
+    .lang-pill {
+      font-size: .84rem; font-weight: 600; padding: .38rem 1.1rem;
+      border-radius: 8px; cursor: pointer; transition: all .18s;
+      border: 1.5px solid rgba(255,107,53,.3); color: rgba(255,107,53,.45);
+      background: transparent; box-shadow: none;
+    }
+    .lang-pill.active {
+      border-color: #ff6b35; color: #ff6b35;
+      background: rgba(255,107,53,.08);
+      box-shadow: 0 0 10px rgba(255,107,53,.28);
+    }
+    .lang-pill:hover { border-color: #ff6b35; color: #ff6b35; }
 
     .btn-secondary {
-      background: transparent; color: var(--muted); border: 1px solid var(--border2);
-      border-radius: 7px; padding: .45rem .9rem; font-size: .84rem; font-weight: 500;
-      cursor: pointer; transition: border-color .15s, color .15s;
+      background: rgba(255,255,255,.03); color: var(--muted);
+      border: 1px solid var(--border2); border-radius: 8px;
+      padding: .45rem .9rem; font-size: .84rem; font-weight: 500;
+      cursor: pointer; transition: border-color .18s, color .18s, box-shadow .18s, background .18s;
     }
-    .btn-secondary:hover { border-color: var(--orange); color: var(--text); }
+    .btn-secondary:hover {
+      border-color: rgba(255,107,53,.5); color: var(--text);
+      background: rgba(255,107,53,.06);
+      box-shadow: 0 0 10px rgba(255,107,53,.12);
+    }
 
     .btn-ghost {
       background: none; border: none; cursor: pointer; color: var(--dim);
-      font-size: .78rem; padding: .25rem .5rem; border-radius: 5px;
+      font-size: .78rem; padding: .25rem .5rem; border-radius: 6px;
       transition: color .15s, background .15s;
     }
-    .btn-ghost:hover { color: var(--text); background: var(--border); }
+    .btn-ghost:hover { color: var(--orange); background: rgba(255,107,53,.08); }
 
     /* ── Input ── */
     .inp {
-      background: var(--bg); border: 1px solid var(--border); color: var(--text);
-      border-radius: 7px; padding: .42rem .7rem; font-size: .84rem; width: 100%;
-      outline: none; transition: border-color .15s;
+      background: rgba(0,0,0,.3); border: 1px solid var(--border2); color: var(--text);
+      border-radius: 8px; padding: .44rem .72rem; font-size: .84rem; width: 100%;
+      outline: none; transition: border-color .18s, box-shadow .18s;
     }
-    .inp:focus { border-color: var(--orange); }
+    .inp:focus {
+      border-color: rgba(255,107,53,.6);
+      box-shadow: 0 0 0 3px rgba(255,107,53,.1), 0 0 12px rgba(255,107,53,.08);
+    }
     .inp::placeholder { color: var(--dim); }
 
     /* ── Misc ── */
-    .badge { font-size: .68rem; font-weight: 600; padding: .18rem .55rem; border-radius: 20px; white-space: nowrap; }
+    .badge {
+      font-size: .67rem; font-weight: 600; padding: .2rem .58rem;
+      border-radius: 20px; white-space: nowrap; letter-spacing: .02em;
+    }
     .sec-lbl { font-size: .67rem; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 7px; }
     hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
-    .pip-done { background: var(--orange); }
-    .pip-todo { background: var(--border); }
 
+    /* ── Progress pips ── */
+    .pip-done {
+      background: var(--orange);
+      box-shadow: 0 0 6px rgba(255,107,53,.7), 0 0 12px rgba(255,107,53,.3);
+    }
+    .pip-todo { background: var(--border2); }
+
+    /* ── Glow text utilities ── */
+    .glow-orange { text-shadow: 0 0 8px var(--glow-o), 0 0 20px rgba(255,107,53,.2); }
+    .glow-green  { text-shadow: 0 0 8px var(--glow-g); }
+    .glow-red    { text-shadow: 0 0 8px var(--glow-r); }
+    .glow-amber  { text-shadow: 0 0 8px rgba(245,158,11,.5); }
+
+    /* ── Running pulse animation ── */
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .55; }
+    }
+    .running-pulse { animation: pulse-glow 1.6s ease-in-out infinite; }
+
+    /* ── Splash screen ── */
+    #splash-screen {
+      position: fixed; inset: 0; z-index: 9999;
+      background: var(--bg);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+      transition: opacity .55s ease;
+    }
+    #splash-canvas {
+      position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
+    }
+    #splash-screen.splash-out { opacity: 0; pointer-events: none; }
+    .splash-center { position: relative; z-index: 1; display:flex;flex-direction:column;align-items:center;gap:22px; }
+    .splash-wordmark {
+      font-size: 2.6rem; font-weight: 800; letter-spacing: -.03em;
+      background: linear-gradient(135deg, #ff9060, #ff6b35 50%, #ffb080);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      filter: drop-shadow(0 0 24px rgba(255,107,53,.6));
+      animation: splash-word-in .7s cubic-bezier(.22,1,.36,1) forwards;
+      opacity: 0; transform: translateY(10px);
+    }
+    @keyframes splash-word-in { to { opacity:1; transform:translateY(0); } }
+    .splash-sub {
+      font-size: .72rem; color: var(--dim); letter-spacing: .14em; text-transform: uppercase;
+      animation: splash-word-in .7s .2s cubic-bezier(.22,1,.36,1) forwards;
+      opacity: 0;
+    }
+    .splash-track { width: 180px; height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .splash-fill {
+      height: 100%; border-radius: 2px;
+      background: linear-gradient(90deg, #ff6b35, #ffaa6b, #ff6b35);
+      background-size: 200% 100%;
+      box-shadow: 0 0 12px rgba(255,107,53,.9);
+      animation: splash-load 4.8s cubic-bezier(.4,0,.15,1) forwards, splash-shimmer 1.5s linear infinite;
+    }
+    @keyframes splash-load { 0%{width:0} 60%{width:70%} 85%{width:88%} 100%{width:100%} }
+    @keyframes splash-shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+    .splash-pct {
+      font-family: 'Cascadia Code','Fira Code',monospace; font-size: .7rem; color: var(--dim);
+      animation: splash-word-in .7s .35s cubic-bezier(.22,1,.36,1) forwards; opacity: 0;
+    }
+    /* Waveform bars */
+    .splash-wave { display: flex; align-items: center; gap: 3px; height: 28px; }
+    .splash-wave span {
+      display: block; width: 3px; border-radius: 3px;
+      background: linear-gradient(180deg, #ff9060, #ff6b35);
+      box-shadow: 0 0 6px rgba(255,107,53,.6);
+      animation: wave-bar 1.1s ease-in-out infinite;
+    }
+    .splash-wave span:nth-child(1){height:8px;animation-delay:0s}
+    .splash-wave span:nth-child(2){height:16px;animation-delay:.1s}
+    .splash-wave span:nth-child(3){height:22px;animation-delay:.2s}
+    .splash-wave span:nth-child(4){height:28px;animation-delay:.3s}
+    .splash-wave span:nth-child(5){height:22px;animation-delay:.4s}
+    .splash-wave span:nth-child(6){height:14px;animation-delay:.5s}
+    .splash-wave span:nth-child(7){height:20px;animation-delay:.6s}
+    .splash-wave span:nth-child(8){height:10px;animation-delay:.7s}
+    @keyframes wave-bar {
+      0%,100%{transform:scaleY(.4);opacity:.5}
+      50%{transform:scaleY(1);opacity:1}
+    }
+    /* Rotating tip */
+    .splash-tip {
+      font-size: .72rem; color: var(--dim); letter-spacing: .02em; min-height: 1.2em;
+      animation: splash-word-in .7s .5s cubic-bezier(.22,1,.36,1) forwards; opacity: 0;
+      transition: opacity .4s;
+    }
+
+    /* ── Home animated background ── */
+    #home-canvas {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 0; opacity: .55;
+    }
+
+    /* ── Home hub ── */
+    .home-hero { text-align: center; padding: 1.5rem 0 1.8rem; }
+    .home-action-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+      margin-bottom: 2rem; position: relative;
+    }
+    .home-action-card {
+      border-radius: 16px; border: 1px solid var(--border2);
+      padding: 1.5rem 1.4rem; cursor: pointer;
+      transition: border-color .22s, box-shadow .22s, transform .18s;
+      position: relative; overflow: visible; text-align: left;
+    }
+    .home-action-card:hover { transform: translateY(-2px); }
+    .hac-icon {
+      width: 40px; height: 40px; border-radius: 11px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; margin-bottom: 12px;
+    }
+    /* New Project (left card) — panel appears to the LEFT, in the outer margin */
+    .hac-expand-left {
+      position: absolute; top: 0; right: calc(100% + 12px); left: auto;
+      width: 260px;
+      background: var(--surface); border-radius: 14px;
+      border: 1px solid rgba(255,107,53,.2);
+      padding: 0 1.3rem; z-index: 30;
+      max-height: 0; overflow: hidden;
+      transition: max-height .35s cubic-bezier(.4,0,.2,1), opacity .28s, padding .28s;
+      opacity: 0; pointer-events: none;
+      box-shadow: 0 8px 36px rgba(0,0,0,.55);
+    }
+    .home-action-card:hover .hac-expand-left {
+      max-height: 280px; opacity: 1; pointer-events: auto;
+      padding: 1.2rem 1.3rem;
+    }
+    /* Continue Project (right card) — panel appears to the RIGHT, in the outer margin */
+    .hac-expand-right {
+      position: absolute; top: 0; left: calc(100% + 12px); right: auto;
+      width: 260px;
+      background: var(--surface); border-radius: 14px;
+      border: 1px solid rgba(160,120,255,.2);
+      padding: 0 1.3rem; z-index: 30;
+      max-height: 0; overflow: hidden;
+      transition: max-height .35s cubic-bezier(.4,0,.2,1), opacity .28s, padding .28s;
+      opacity: 0; pointer-events: none;
+      box-shadow: 0 8px 36px rgba(0,0,0,.55);
+    }
+    .home-action-card:hover .hac-expand-right {
+      max-height: 280px; opacity: 1; pointer-events: auto;
+      padding: 1.2rem 1.3rem;
+    }
+    .home-projects-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+    }
+
+    /* ── New project page ── */
+    .create-wrap {
+      max-width: 520px; margin: 0 auto; padding: 2.5rem 1.5rem;
+    }
+    .create-field {
+      margin-bottom: 1.4rem;
+    }
+    .create-label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: .72rem; font-weight: 700; color: var(--dim);
+      text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px;
+    }
+    .create-label-num {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: rgba(255,107,53,.15); color: var(--orange);
+      font-size: .65rem; font-weight: 800; display: inline-flex;
+      align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .lang-grid {
+      display: grid; grid-template-columns: repeat(5,1fr); gap: 8px;
+    }
+    .lang-btn {
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--raised); padding: .55rem .3rem;
+      text-align: center; cursor: pointer;
+      transition: border-color .15s, background .15s, box-shadow .15s;
+    }
+    .lang-btn:hover { border-color: rgba(255,107,53,.4); background: rgba(255,107,53,.05); }
+    .lang-btn.active {
+      border-color: rgba(255,107,53,.65); background: rgba(255,107,53,.1);
+      box-shadow: 0 0 12px rgba(255,107,53,.2);
+    }
+    .lang-btn .lang-flag { font-size: 1.35rem; line-height: 1; margin-bottom: 3px; }
+    .lang-btn .lang-name { font-size: .6rem; font-weight: 600; color: var(--muted); }
+    .lang-btn.active .lang-name { color: var(--orange); }
+    .drop-zone {
+      border: 1.5px dashed var(--border2); border-radius: 12px;
+      background: var(--raised); padding: 1.6rem 1rem;
+      text-align: center; cursor: pointer;
+      transition: border-color .2s, background .2s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.has-file {
+      border-color: rgba(255,107,53,.5); background: rgba(255,107,53,.04);
+    }
+
+    /* ── Cue sheet ── */
+    .cue-row {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      transition: border-color .18s, box-shadow .18s; overflow: hidden;
+    }
+    .cue-row:hover { border-color: rgba(255,107,53,.28); box-shadow: 0 2px 14px rgba(0,0,0,.3); }
+    .cue-tc {
+      font-family: 'Cascadia Code','Fira Code',monospace; font-size: .63rem;
+      color: var(--dim); white-space: nowrap;
+    }
+    .cue-char-badge {
+      font-size: .62rem; font-weight: 700; font-family: 'Cascadia Code','Fira Code',monospace;
+      background: rgba(255,107,53,.1); color: var(--orange);
+      border: 1px solid rgba(255,107,53,.22); border-radius: 5px;
+      padding: .18rem .55rem; white-space: nowrap;
+    }
+
+    /* ── File input ── */
     input[type=file]::file-selector-button {
       background: var(--raised); color: var(--text); border: 1px solid var(--border2);
-      border-radius: 6px; padding: .25rem .65rem; font-size: .78rem; font-weight: 500;
-      cursor: pointer; margin-right: .65rem; transition: background .15s;
+      border-radius: 7px; padding: .25rem .65rem; font-size: .78rem; font-weight: 500;
+      cursor: pointer; margin-right: .65rem; transition: background .15s, box-shadow .15s;
     }
-    input[type=file]::file-selector-button:hover { background: var(--border2); }
+    input[type=file]::file-selector-button:hover {
+      background: var(--border2);
+      box-shadow: 0 0 8px rgba(255,107,53,.15);
+    }
+
+    /* ── Left panel ── */
+    .stage-header-block {
+      padding-bottom: 1rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .stage-eyebrow {
+      display: flex; align-items: center; gap: 7px; margin-bottom: 8px;
+    }
+    .stage-num {
+      width: 28px; height: 28px; border-radius: 9px; flex-shrink: 0;
+      background: linear-gradient(135deg, rgba(255,107,53,.25), rgba(255,107,53,.1));
+      border: 1px solid rgba(255,107,53,.4);
+      color: var(--orange); font-size: .78rem; font-weight: 900;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 10px rgba(255,107,53,.2);
+    }
+    .stage-label {
+      font-size: .65rem; font-weight: 800; color: var(--orange);
+      text-transform: uppercase; letter-spacing: .13em;
+    }
+    .stage-title {
+      font-size: 1.05rem; font-weight: 800; color: var(--text);
+      letter-spacing: -.01em; margin-bottom: 6px; line-height: 1.2;
+    }
+    .stage-desc {
+      font-size: .73rem; color: var(--dim); line-height: 1.65; margin-bottom: 0;
+    }
+    .stage-steps {
+      display: flex; flex-direction: column; gap: 4px;
+      margin: .9rem 0;
+    }
+    .stage-step {
+      display: flex; align-items: flex-start; gap: 7px;
+      font-size: .71rem; color: var(--muted); line-height: 1.45;
+    }
+    .stage-step-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: rgba(255,107,53,.5); flex-shrink: 0; margin-top: 5px;
+    }
+    .stage-actions {
+      display: flex; flex-direction: column; gap: 7px; margin-bottom: 1rem;
+    }
+    .stage-divider {
+      border: none; border-top: 1px solid var(--border); margin: .9rem 0;
+    }
+    .tech-stack {
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .tech-pill {
+      display: flex; align-items: center; gap: 7px;
+      background: var(--raised); border: 1px solid var(--border);
+      border-radius: 8px; padding: .38rem .65rem;
+      font-size: .69rem;
+    }
+    .tech-pill-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    }
+    .tech-pill-name { font-weight: 700; color: var(--text); }
+    .tech-pill-desc { color: var(--dim); margin-left: auto; font-size: .64rem; }
 
     /* ── Localization table ── */
     .loc-row { display: flex; gap: 5px; align-items: center; margin-bottom: 4px; }
     .loc-orig {
       flex: 1; padding: .38rem .6rem; font-size: .75rem; font-family: monospace;
-      color: var(--muted); background: var(--bg); border: 1px solid var(--border);
+      color: var(--muted); background: rgba(0,0,0,.25); border: 1px solid var(--border);
       border-radius: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .loc-arrow { color: var(--dim); font-size: .7rem; flex-shrink: 0; }
     .loc-del {
       color: var(--dim); background: none; border: none; cursor: pointer;
       font-size: 1.1rem; padding: 0 3px; line-height: 1; flex-shrink: 0;
+      transition: color .15s;
     }
     .loc-del:hover { color: var(--red); }
 
@@ -184,10 +577,40 @@
       display: flex; align-items: center; justify-content: center;
       transition: color .15s, background .15s;
     }
-    .btn-trash:hover { color: var(--red); background: rgba(239,68,68,.12); }
+    .btn-trash:hover { color: var(--red); background: rgba(239,68,68,.1); }
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
+
+<!-- ── Splash ── -->
+<div id="splash-screen">
+  <canvas id="splash-canvas"></canvas>
+  <div class="splash-center">
+    <!-- Logo + wordmark -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:4px;">
+      <img src="/static/logo.png" alt="PocketFM"
+           style="height:44px;width:auto;filter:drop-shadow(0 0 14px rgba(255,107,53,.7)) drop-shadow(0 0 40px rgba(255,107,53,.3));animation:splash-word-in .7s cubic-bezier(.22,1,.36,1) forwards;opacity:0;" />
+      <div class="splash-wordmark">DubStudio</div>
+    </div>
+    <div class="splash-sub" style="margin-top:2px;">by PocketFM</div>
+
+    <!-- Waveform -->
+    <div class="splash-wave" style="margin-top:22px;">
+      <span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span>
+    </div>
+
+    <!-- Progress bar + pct -->
+    <div style="display:flex;flex-direction:column;align-items:center;gap:7px;margin-top:16px;">
+      <div class="splash-track"><div class="splash-fill" id="splash-fill-bar"></div></div>
+      <div class="splash-pct" id="splash-pct">0%</div>
+    </div>
+
+    <!-- Rotating tip -->
+    <div class="splash-tip" id="splash-tip" style="margin-top:18px;text-align:center;"></div>
+  </div>
+</div>
+
 <div id="app-shell">
 
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
@@ -198,7 +621,7 @@
   <div class="nav-bar">
     <img src="/static/logo.png" alt="PocketFM" style="height:26px;width:auto;" />
     <div class="nav-div"></div>
-    <span style="color:var(--muted);font-size:.8rem;font-weight:600;letter-spacing:.04em;">DubStudio</span>
+    <span style="font-size:.9rem;font-weight:900;letter-spacing:-.01em;background:linear-gradient(135deg,#ff9060,#ff6b35 50%,#ffb080);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 10px rgba(255,107,53,.55)) drop-shadow(0 0 24px rgba(255,107,53,.2));">DubStudio</span>
     <template x-if="view==='project' && project?.name">
       <span style="color:var(--dim);font-size:.75rem;">· <span x-text="project.name" style="color:var(--muted);"></span></span>
     </template>
@@ -208,27 +631,6 @@
     </button>
   </div>
 
-  <!-- ── Stat boxes (project view only) ───────────────────────────────────── -->
-  <div x-show="view==='project'" class="stat-bar">
-    <div class="stat-box">
-      <span class="stat-lbl">Elapsed</span>
-      <span class="stat-val" x-text="elapsedStr" style="letter-spacing:.05em;">--:--</span>
-    </div>
-    <div class="stat-box">
-      <span class="stat-lbl">Stage</span>
-      <span class="stat-val" x-text="stageStatusLabel"
-            :style="project?.job_status==='running' ? 'color:var(--amber)' : project?.job_status==='error' ? 'color:var(--red)' : project?.stage4_done ? 'color:var(--green)' : ''"
-            style="font-size:1.1rem;">Ready</span>
-    </div>
-    <div class="stat-box">
-      <span class="stat-lbl">Tokens</span>
-      <span class="stat-val" x-text="tokenTotal > 0 ? tokenTotal.toLocaleString() : '0'">0</span>
-    </div>
-    <div class="stat-box">
-      <span class="stat-lbl">Cost</span>
-      <span class="stat-val" x-text="costStr" style="color:var(--green);">$0.00</span>
-    </div>
-  </div>
 </header>
 
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
@@ -237,95 +639,306 @@
 <div class="content-area">
 
   <!-- ── HOME ─────────────────────────────────────────────────────────────── -->
-  <div x-show="view === 'home'" class="scroll-view">
-    <div class="page-wrap">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem;">
-        <div>
-          <h1 style="font-size:1.35rem;font-weight:700;">Projects</h1>
-          <p style="color:var(--muted);font-size:.78rem;margin-top:2px;">Video dubbing pipeline</p>
+  <div x-show="view === 'home'" class="scroll-view" style="position:relative;">
+    <canvas id="home-canvas"></canvas>
+    <div class="page-wrap" style="max-width:780px;position:relative;z-index:1;overflow:visible;">
+
+      <!-- Hero -->
+      <div class="home-hero">
+        <div style="margin-bottom:1.8rem;">
+          <div style="font-size:3.2rem;font-weight:900;letter-spacing:-.04em;line-height:1;background:linear-gradient(135deg,#ff9060,#ff6b35 45%,#ffb080);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 32px rgba(255,107,53,.65)) drop-shadow(0 0 80px rgba(255,107,53,.25));">DubStudio</div>
+          <div style="font-size:.72rem;color:var(--dim);letter-spacing:.2em;text-transform:uppercase;margin-top:6px;font-weight:500;">by PocketFM</div>
         </div>
-        <button @click="view='create'" class="btn-primary">+ New Project</button>
+        <h1 style="font-size:1.7rem;font-weight:800;letter-spacing:-.03em;margin-bottom:.6rem;background:linear-gradient(135deg,var(--text) 60%,var(--muted));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
+          What would you like to do?
+        </h1>
+        <p style="color:var(--dim);font-size:.82rem;max-width:400px;margin:0 auto;line-height:1.6;">
+          End-to-end video dubbing — transcribe, translate, voice, and export.
+        </p>
       </div>
 
-      <div x-show="projects.length === 0" class="card"
-           style="text-align:center;padding:5rem 2rem;color:var(--muted);">
-        <p style="font-size:.9rem;font-weight:500;margin-bottom:4px;">No projects yet</p>
-        <p style="font-size:.78rem;">Click <strong style="color:var(--orange);">+ New Project</strong> to get started.</p>
+      <!-- Two action cards -->
+      <div class="home-action-grid">
+
+        <!-- New Project — hover panel appears to the RIGHT -->
+        <div class="home-action-card" @click="view='create'"
+             style="background:linear-gradient(145deg,rgba(255,107,53,.1),rgba(255,107,53,.03));border-color:rgba(255,107,53,.25);"
+             onmouseenter="this.style.borderColor='rgba(255,107,53,.6)';this.style.boxShadow='0 0 28px rgba(255,107,53,.13),0 6px 22px rgba(0,0,0,.3)'"
+             onmouseleave="this.style.borderColor='rgba(255,107,53,.25)';this.style.boxShadow=''">
+          <div class="hac-icon" style="background:rgba(255,107,53,.18);color:var(--orange);">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+          <p style="font-size:1.05rem;font-weight:800;margin-bottom:5px;color:var(--text);letter-spacing:-.01em;">New Project</p>
+          <p style="font-size:.75rem;color:var(--dim);line-height:1.6;">Start fresh — upload a video and run the full pipeline.</p>
+          <div style="margin-top:14px;">
+            <span style="font-size:.74rem;font-weight:700;color:var(--orange);">Get started →</span>
+          </div>
+          <!-- Detail panel floats to the LEFT (outer margin) -->
+          <div class="hac-expand-left">
+            <p style="font-size:.7rem;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">4-Stage Pipeline</p>
+            <div style="display:flex;flex-direction:column;gap:7px;">
+              <div style="display:flex;align-items:center;gap:9px;font-size:.73rem;color:var(--muted);">
+                <span style="width:20px;height:20px;border-radius:6px;background:rgba(255,107,53,.15);color:var(--orange);font-size:.6rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">1</span>
+                <div><span style="color:var(--text);font-weight:600;">Transcribe</span> — Whisper extracts all dialogue</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;font-size:.73rem;color:var(--muted);">
+                <span style="width:20px;height:20px;border-radius:6px;background:rgba(255,107,53,.15);color:var(--orange);font-size:.6rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">2</span>
+                <div><span style="color:var(--text);font-weight:600;">Translate</span> — Claude AI, 2-pass for fluency</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;font-size:.73rem;color:var(--muted);">
+                <span style="width:20px;height:20px;border-radius:6px;background:rgba(255,107,53,.15);color:var(--orange);font-size:.6rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">3</span>
+                <div><span style="color:var(--text);font-weight:600;">Voice</span> — ElevenLabs TTS per character</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;font-size:.73rem;color:var(--muted);">
+                <span style="width:20px;height:20px;border-radius:6px;background:rgba(255,107,53,.15);color:var(--orange);font-size:.6rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">4</span>
+                <div><span style="color:var(--text);font-weight:600;">Stitch</span> — Final dubbed MP4 export</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Continue Project — hover panel appears to the LEFT -->
+        <div class="home-action-card" @click="view='projects'"
+             style="background:rgba(255,255,255,.02);"
+             onmouseenter="this.style.borderColor='rgba(180,140,255,.35)';this.style.boxShadow='0 0 28px rgba(120,80,255,.1),0 6px 22px rgba(0,0,0,.28)'"
+             onmouseleave="this.style.borderColor='var(--border2)';this.style.boxShadow=''">
+          <div class="hac-icon" style="background:rgba(160,120,255,.12);color:rgba(180,140,255,.9);">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <p style="font-size:1.05rem;font-weight:800;margin-bottom:5px;color:var(--text);letter-spacing:-.01em;">Continue Project</p>
+          <p style="font-size:.75rem;color:var(--dim);line-height:1.6;">
+            <span x-show="projects.length === 0">No projects yet — create one first.</span>
+            <span x-show="projects.length > 0" x-text="projects.length + ' project' + (projects.length===1?'':'s') + ' saved.'"></span>
+          </p>
+          <div style="margin-top:14px;">
+            <span style="font-size:.74rem;font-weight:700;color:rgba(180,140,255,.85);">Browse projects →</span>
+          </div>
+          <!-- Detail panel floats to the RIGHT (outer margin) -->
+          <div class="hac-expand-right">
+            <p style="font-size:.7rem;font-weight:700;color:rgba(180,140,255,.85);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">What you can do</p>
+            <div style="display:flex;flex-direction:column;gap:7px;">
+              <div style="display:flex;align-items:center;gap:9px;font-size:.73rem;color:var(--muted);">
+                <span style="color:rgba(180,140,255,.8);font-size:1rem;width:20px;text-align:center;flex-shrink:0;">⟳</span>
+                <div>Resume any paused or in-progress stage</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;font-size:.73rem;color:var(--muted);">
+                <span style="color:rgba(180,140,255,.8);font-size:1rem;width:20px;text-align:center;flex-shrink:0;">✎</span>
+                <div>Edit translations directly in the cue sheet</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;font-size:.73rem;color:var(--muted);">
+                <span style="color:rgba(180,140,255,.8);font-size:1rem;width:20px;text-align:center;flex-shrink:0;">↓</span>
+                <div>Download the final dubbed video</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;font-size:.73rem;color:var(--muted);">
+                <span style="color:rgba(180,140,255,.8);font-size:1rem;width:20px;text-align:center;flex-shrink:0;">↺</span>
+                <div>Regen individual TTS segments</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
-      <div style="display:grid;gap:10px;">
-        <template x-for="p in projects" :key="p.name">
-          <div @click="openProject(p.name)" class="card"
-               style="padding:1rem 1.2rem;cursor:pointer;transition:border-color .15s;"
-               onmouseenter="this.style.borderColor='var(--orange)'"
-               onmouseleave="this.style.borderColor='var(--border)'">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
-              <div style="min-width:0;">
-                <p style="font-weight:600;font-size:.92rem;" x-text="p.name"></p>
-                <p style="font-size:.72rem;color:var(--muted);margin-top:2px;"
-                   x-text="p.video_filename + '  →  ' + (p.target_lang_name || p.target_lang)"></p>
+    </div>
+  </div>
+
+  <!-- ── PROJECTS LIST ────────────────────────────────────────────────────── -->
+  <div x-show="view === 'projects'" class="scroll-view">
+    <div class="page-wrap" style="max-width:700px;">
+
+      <!-- Back + header -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;">
+        <button @click="view='home'" style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:.38rem .7rem;font-size:.8rem;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;flex-shrink:0;"
+                onmouseenter="this.style.borderColor='rgba(255,107,53,.4)';this.style.color='var(--orange)'"
+                onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+          ← Back
+        </button>
+        <div>
+          <h1 style="font-size:1.2rem;font-weight:800;letter-spacing:-.02em;">Your Projects</h1>
+          <p style="font-size:.72rem;color:var(--dim);margin-top:1px;"
+             x-text="filteredProjects.length + ' of ' + projects.length + ' project' + (projects.length===1?'':'s')"></p>
+        </div>
+        <div style="flex:1;"></div>
+        <button @click="loadProjects()" class="btn-secondary" style="font-size:.75rem;padding:.34rem .7rem;">↻ Refresh</button>
+        <button @click="view='create'" class="btn-primary" style="font-size:.8rem;padding:.38rem .9rem;">+ New</button>
+      </div>
+
+      <!-- Search bar -->
+      <div style="position:relative;margin-bottom:1.4rem;">
+        <svg style="position:absolute;left:11px;top:50%;transform:translateY(-50%);pointer-events:none;opacity:.4;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input x-model="projectFilter"
+               class="inp" type="text" placeholder="Search by name, file, or language…"
+               style="padding-left:32px;width:100%;font-size:.82rem;" />
+        <button x-show="projectFilter" @click="projectFilter=''"
+                style="position:absolute;right:9px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--dim);cursor:pointer;font-size:.9rem;line-height:1;padding:2px 5px;"
+                onmouseenter="this.style.color='var(--text)'" onmouseleave="this.style.color='var(--dim)'">×</button>
+      </div>
+
+      <!-- Language filter pills -->
+      <div x-show="projectLangs.length > 1" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1.3rem;align-items:center;">
+        <button @click="langFilter=''" :class="langFilter==='' ? 'lang-pill active' : 'lang-pill'">All</button>
+        <template x-for="l in projectLangs" :key="l.code">
+          <button @click="langFilter = langFilter===l.code ? '' : l.code"
+                  :class="langFilter===l.code ? 'lang-pill active' : 'lang-pill'"
+                  x-text="l.name">
+          </button>
+        </template>
+      </div>
+
+      <!-- Empty state -->
+      <div x-show="projects.length === 0"
+           style="text-align:center;padding:4rem 2rem;color:var(--dim);font-size:.82rem;background:var(--surface);border:1px dashed var(--border2);border-radius:14px;">
+        <div style="font-size:1.8rem;margin-bottom:.7rem;opacity:.3;">📂</div>
+        <p style="font-weight:600;margin-bottom:4px;color:var(--muted);">No projects yet</p>
+        <p>Click <span style="color:var(--orange);font-weight:600;">+ New</span> to create your first project.</p>
+      </div>
+
+      <!-- No results -->
+      <div x-show="projects.length > 0 && filteredProjects.length === 0"
+           style="text-align:center;padding:2.5rem;color:var(--dim);font-size:.82rem;background:var(--surface);border:1px dashed var(--border2);border-radius:12px;">
+        No projects match
+        <span x-show="projectFilter"> "<span x-text="projectFilter" style="color:var(--muted);font-weight:600;"></span>"</span>
+        <span x-show="langFilter"> in <span x-text="langFilter" style="color:var(--orange);font-weight:600;text-transform:capitalize;"></span></span>
+      </div>
+
+      <!-- Project cards -->
+      <div style="display:grid;gap:9px;">
+        <template x-for="p in filteredProjects" :key="p.name">
+          <div @click="openProject(p.name)"
+               style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem 1.2rem;cursor:pointer;transition:border-color .18s,box-shadow .18s;"
+               onmouseenter="this.style.borderColor='rgba(255,107,53,.45)';this.style.boxShadow='0 0 20px rgba(255,107,53,.08),0 4px 18px rgba(0,0,0,.28)'"
+               onmouseleave="this.style.borderColor='var(--border)';this.style.boxShadow=''">
+            <div style="display:flex;align-items:center;gap:14px;">
+              <!-- Stage pips -->
+              <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
+                <div style="display:flex;gap:3px;">
+                  <template x-for="s in [1,2,3,4]" :key="s">
+                    <div style="height:3px;width:22px;border-radius:2px;transition:background .3s;"
+                         :class="stageDone(p,s) ? 'pip-done' : 'pip-todo'"></div>
+                  </template>
+                </div>
+                <span style="font-size:.56rem;color:var(--dim);letter-spacing:.04em;" x-text="stageLabel(p)"></span>
               </div>
-              <div style="display:flex;align-items:center;gap:7px;flex-shrink:0;">
-                <span class="badge" :style="stageBadgeStyle(p)" x-text="stageLabel(p)"></span>
-                <button class="btn-trash" @click.stop="deleteConfirm = p.name" title="Delete project">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-                  </svg>
-                </button>
+              <!-- Name + filename -->
+              <div style="flex:1;min-width:0;">
+                <p style="font-weight:700;font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="p.name"></p>
+                <p style="font-size:.68rem;color:var(--dim);margin-top:2px;font-family:'Cascadia Code','Fira Code',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                   x-text="p.video_filename"></p>
               </div>
-            </div>
-            <div style="display:flex;gap:5px;margin-top:12px;">
-              <template x-for="s in [1,2,3,4]" :key="s">
-                <div style="height:3px;flex:1;border-radius:2px;transition:background .3s;"
-                     :class="stageDone(p,s) ? 'pip-done' : 'pip-todo'"></div>
-              </template>
-            </div>
-            <div style="display:flex;gap:5px;margin-top:4px;">
-              <template x-for="lbl in ['Script','Localize','TTS','Stitch']" :key="lbl">
-                <p style="flex:1;text-align:center;font-size:.58rem;color:var(--dim);font-weight:500;" x-text="lbl"></p>
-              </template>
+              <!-- Language badge -->
+              <span style="font-size:.72rem;font-weight:700;color:var(--orange);background:rgba(255,107,53,.09);border:1px solid rgba(255,107,53,.22);border-radius:6px;padding:.2rem .6rem;flex-shrink:0;letter-spacing:.02em;"
+                    x-text="p.target_lang_name||p.target_lang"></span>
+              <!-- Delete -->
+              <button class="btn-trash" @click.stop="deleteConfirm = p.name" title="Delete project">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                </svg>
+              </button>
             </div>
           </div>
         </template>
       </div>
+
     </div>
   </div>
 
   <!-- ── CREATE ────────────────────────────────────────────────────────────── -->
   <div x-show="view === 'create'" class="scroll-view">
-    <div style="max-width:460px;margin:0 auto;padding:2.5rem 1.5rem;">
-      <h1 style="font-size:1.25rem;font-weight:700;margin-bottom:1.8rem;">New Project</h1>
-      <form @submit.prevent="createProject" class="card" style="padding:1.4rem;">
-        <div style="margin-bottom:1rem;">
-          <label style="display:block;font-size:.76rem;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;">Project Name</label>
-          <input x-model="newProject.name" class="inp" type="text" placeholder="e.g. SHOW_EP01" />
+    <div class="create-wrap">
+
+      <!-- Back + title -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:2.2rem;">
+        <button @click="view='home'; newProject={name:'',target_lang:'it',videoFile:null}; if($refs.videoFileInput) $refs.videoFileInput.value=''"
+                style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:.38rem .7rem;font-size:.8rem;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;flex-shrink:0;"
+                onmouseenter="this.style.borderColor='rgba(255,107,53,.4)';this.style.color='var(--orange)'"
+                onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">← Back</button>
+        <div>
+          <h1 style="font-size:1.3rem;font-weight:800;letter-spacing:-.02em;">New Project</h1>
+          <p style="font-size:.72rem;color:var(--dim);margin-top:1px;">Set up your dubbing project in seconds</p>
         </div>
-        <div style="margin-bottom:1rem;">
-          <label style="display:block;font-size:.76rem;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;">Target Language</label>
-          <select x-model="newProject.target_lang" class="inp">
-            <option value="de">German</option>
-            <option value="fr">French</option>
-            <option value="it">Italian</option>
-            <option value="es">Spanish</option>
-            <option value="pt">Portuguese</option>
-          </select>
+      </div>
+
+      <form @submit.prevent="createProject">
+
+        <!-- Step 1: Name -->
+        <div class="create-field">
+          <div class="create-label">
+            <span class="create-label-num">1</span>
+            Project Name
+          </div>
+          <input x-model="newProject.name" class="inp" type="text"
+                 placeholder="e.g. SHOW_EP01_S2"
+                 style="font-size:.92rem;padding:.65rem .85rem;" />
+          <p style="font-size:.68rem;color:var(--dim);margin-top:5px;padding-left:2px;">Use a short identifier — no spaces recommended.</p>
         </div>
-        <div style="margin-bottom:1.4rem;">
-          <label style="display:block;font-size:.76rem;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;">Video File</label>
-          <input type="file" accept="video/*" @change="newProject.videoFile = $event.target.files[0]"
-                 style="font-size:.8rem;color:var(--muted);width:100%;" />
+
+        <!-- Step 2: Language -->
+        <div class="create-field">
+          <div class="create-label">
+            <span class="create-label-num">2</span>
+            Target Language
+          </div>
+          <div class="lang-grid">
+            <template x-for="l in [{v:'it',flag:'🇮🇹',name:'Italian'},{v:'de',flag:'🇩🇪',name:'German'},{v:'fr',flag:'🇫🇷',name:'French'},{v:'es',flag:'🇪🇸',name:'Spanish'},{v:'pt',flag:'🇧🇷',name:'Portuguese'}]" :key="l.v">
+              <div class="lang-btn" :class="newProject.target_lang===l.v?'active':''"
+                   @click="newProject.target_lang=l.v">
+                <div class="lang-flag" x-text="l.flag"></div>
+                <div class="lang-name" x-text="l.name"></div>
+              </div>
+            </template>
+          </div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button type="submit" :disabled="creating" class="btn-primary" style="flex:1;padding:.55rem;">
-            <span x-show="!creating">Create Project</span>
+
+        <!-- Step 3: Video file -->
+        <div class="create-field">
+          <div class="create-label">
+            <span class="create-label-num">3</span>
+            Video File
+          </div>
+          <div class="drop-zone" :class="newProject.videoFile?'has-file':''"
+               @click="$refs.videoFileInput.click()">
+            <input type="file" accept="video/*" x-ref="videoFileInput"
+                   @change="newProject.videoFile = $event.target.files[0]"
+                   style="display:none;" />
+            <template x-if="!newProject.videoFile">
+              <div>
+                <div style="font-size:1.6rem;opacity:.35;margin-bottom:6px;">🎬</div>
+                <p style="font-size:.82rem;font-weight:600;color:var(--muted);">Click to choose a video file</p>
+                <p style="font-size:.7rem;color:var(--dim);margin-top:3px;">MP4, MOV, MKV, AVI…</p>
+              </div>
+            </template>
+            <template x-if="newProject.videoFile">
+              <div style="display:flex;align-items:center;gap:10px;justify-content:center;">
+                <span style="font-size:1.2rem;">✅</span>
+                <div style="text-align:left;">
+                  <p style="font-size:.82rem;font-weight:700;color:var(--text);" x-text="newProject.videoFile.name"></p>
+                  <p style="font-size:.68rem;color:var(--dim);margin-top:2px;" x-text="(newProject.videoFile.size/1024/1024).toFixed(1)+' MB'"></p>
+                </div>
+                <button type="button" @click.stop="newProject.videoFile=null;$refs.videoFileInput.value=''"
+                        style="margin-left:8px;background:none;border:none;color:var(--dim);cursor:pointer;font-size:1rem;"
+                        onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--dim)'">×</button>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- CTA -->
+        <div style="display:flex;gap:10px;margin-top:.5rem;">
+          <button type="submit" :disabled="creating || !newProject.name || !newProject.videoFile"
+                  class="btn-primary"
+                  style="flex:1;padding:.65rem;font-size:.9rem;font-weight:700;opacity:1;transition:opacity .15s;"
+                  :style="(creating||!newProject.name||!newProject.videoFile)?'opacity:.45;cursor:not-allowed;':''">
+            <span x-show="!creating" style="display:inline-flex;align-items:center;gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Create Project
+            </span>
             <span x-show="creating">Creating…</span>
           </button>
-          <button type="button" @click="view='home'" class="btn-secondary">Cancel</button>
         </div>
+
         <p x-show="createError" x-text="createError"
-           style="color:var(--red);font-size:.78rem;margin-top:8px;"></p>
+           style="color:var(--red);font-size:.78rem;margin-top:10px;text-align:center;"></p>
       </form>
     </div>
   </div>
@@ -334,31 +947,53 @@
   <div x-show="view === 'project'" class="proj-view">
 
     <!-- Title bar -->
-    <div class="proj-titlebar">
-      <div style="display:flex;align-items:center;gap:12px;">
+    <div class="proj-titlebar" style="padding:10px 18px 10px;border-bottom:1px solid var(--border);background:var(--surface);position:relative;overflow:hidden;">
+      <!-- subtle glow line -->
+      <div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 5%,rgba(255,107,53,.18) 30%,rgba(255,107,53,.18) 70%,transparent 95%);"></div>
+      <div style="display:flex;align-items:center;gap:14px;">
+
+        <!-- Project name block -->
         <div style="flex:1;min-width:0;">
-          <h2 style="font-size:1.05rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-              x-text="project?.name"></h2>
-          <p style="font-size:.7rem;color:var(--muted);margin-top:1px;"
-             x-text="(project?.video_filename||'') + '  →  ' + (project?.target_lang_name||project?.target_lang||'')"></p>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px;">
+            <h2 style="font-size:1.15rem;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em;background:linear-gradient(135deg,var(--text) 40%,var(--muted));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;"
+                x-text="project?.name"></h2>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:.67rem;color:var(--dim);font-family:'Cascadia Code','Fira Code',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                  x-text="project?.video_filename||''"></span>
+            <span style="font-size:.6rem;color:var(--border2);">▶</span>
+            <span style="font-size:.67rem;font-weight:600;color:var(--orange);letter-spacing:.02em;"
+                  x-text="project?.target_lang_name||project?.target_lang||''"></span>
+          </div>
         </div>
-        <!-- Stage progress pips -->
-        <div style="display:flex;flex-direction:column;gap:3px;">
-          <div style="display:flex;gap:4px;">
+
+        <!-- Stage pips with labels -->
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+          <div style="display:flex;gap:5px;">
             <template x-for="s in [1,2,3,4]" :key="s">
-              <div style="height:3px;width:26px;border-radius:2px;transition:background .3s;"
-                   :class="stageDone(project,s) ? 'pip-done' : 'pip-todo'"></div>
+              <div style="position:relative;">
+                <div style="height:4px;width:32px;border-radius:3px;transition:all .3s;"
+                     :class="stageDone(project,s) ? 'pip-done' : 'pip-todo'"></div>
+              </div>
+            </template>
+          </div>
+          <div style="display:flex;gap:5px;">
+            <template x-for="lbl in ['Script','Localize','TTS','Stitch']" :key="lbl">
+              <p style="width:32px;text-align:center;font-size:.55rem;color:var(--dim);font-weight:500;letter-spacing:.01em;" x-text="lbl"></p>
             </template>
           </div>
         </div>
+
         <!-- Status badge -->
         <span class="badge"
-              :style="project?.job_status==='running' ? 'background:#2a1f00;color:var(--amber)' :
-                      project?.job_status==='error'   ? 'background:#2a0000;color:var(--red)' :
-                      'background:var(--raised);color:var(--muted)'"
-              x-text="project?.job_status==='running' ? 'Running S'+project?.job_stage+'…' :
-                      project?.job_status==='error'   ? 'Error' : 'Idle'">
+              :class="project?.job_status==='running' ? 'running-pulse' : ''"
+              :style="project?.job_status==='running' ? 'background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.28);box-shadow:0 0 10px rgba(245,158,11,.18)' :
+                      project?.job_status==='error'   ? 'background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.28);box-shadow:0 0 8px rgba(239,68,68,.18)' :
+                      'background:rgba(255,255,255,.04);color:var(--dim);border:1px solid var(--border)'"
+              x-text="project?.job_status==='running' ? '⬤ S'+project?.job_stage+' running…' :
+                      project?.job_status==='error'   ? '✕ Error' : '● Idle'">
         </span>
+
       </div>
     </div>
 
@@ -388,41 +1023,71 @@
 
           <!-- Stage 1 -->
           <div x-show="activeStage===1">
-            <p style="font-size:.92rem;font-weight:700;margin-bottom:4px;">1. SCRIPT</p>
-            <p style="font-size:.73rem;color:var(--muted);line-height:1.55;margin-bottom:1.1rem;">
-              Audio extraction → Whisper transcription → sentence merging → character detection → translation → cue sheet
-            </p>
-            <div style="display:flex;flex-direction:column;gap:7px;">
+            <div class="stage-header-block">
+              <div class="stage-eyebrow">
+                <div class="stage-num">1</div>
+                <span class="stage-label">Script</span>
+              </div>
+              <div class="stage-title">Transcribe &amp; Translate</div>
+              <p class="stage-desc">Extracts every spoken word from your video, detects characters, then runs a 2-pass AI translation to produce a ready-to-use cue sheet.</p>
+              <div class="stage-steps">
+                <div class="stage-step"><div class="stage-step-dot"></div>Whisper transcribes audio to timed segments</div>
+                <div class="stage-step"><div class="stage-step-dot"></div>Claude detects character names per segment</div>
+                <div class="stage-step"><div class="stage-step-dot"></div>Pass 1 — technical accuracy translation</div>
+                <div class="stage-step"><div class="stage-step-dot"></div>Pass 2 — Pocket FM audio drama style</div>
+                <div class="stage-step"><div class="stage-step-dot"></div>Exports cue sheet Excel with all variants</div>
+              </div>
+            </div>
+
+            <div class="stage-actions">
               <button @click="runStage(1)" :disabled="project?.job_status==='running'" class="btn-primary" style="width:100%;">
-                <span x-show="!project?.stage1_done">Run Stage 1</span>
-                <span x-show="project?.stage1_done">Re-run Stage 1</span>
+                <span x-show="!project?.stage1_done">▶  Run Stage 1</span>
+                <span x-show="project?.stage1_done">↺  Re-run Stage 1</span>
+              </button>
+              <button x-show="project?.job_status==='running' && project?.job_stage===1"
+                      @click="cancelJob()"
+                      style="width:100%;background:rgba(185,28,28,.12);color:#f87171;border:1px solid rgba(185,28,28,.35);border-radius:8px;padding:.45rem 1rem;font-size:.84rem;font-weight:600;cursor:pointer;">
+                ■  Cancel
               </button>
               <a x-show="project?.stage1_done"
                  :href="'/api/projects/'+project?.name+'/files/cue_sheet_final.xlsx'"
-                 class="btn-secondary" style="text-align:center;text-decoration:none;display:block;">
-                ↓ Cue Sheet (.xlsx)
-              </a>
-              <a x-show="project?.stage1_done"
-                 :href="'/api/projects/'+project?.name+'/files/'+project?.name+'_stage1_review.docx'"
-                 class="btn-secondary"
-                 style="text-align:center;text-decoration:none;display:block;background:rgba(255,107,53,.07);border-color:rgba(255,107,53,.3);color:var(--orange);">
-                ↓ Review Doc (.docx)
+                 class="btn-secondary" style="text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Cue Sheet (.xlsx)
               </a>
             </div>
-            <hr />
-            <p class="sec-lbl">Stack</p>
-            <p style="font-size:.7rem;color:var(--dim);line-height:1.65;">
-              <strong style="color:var(--muted);">faster-whisper</strong> (local, free) for transcription<br/>
-              <strong style="color:var(--muted);">Claude</strong> via Argus for character detection &amp; translation
-            </p>
+
+            <hr class="stage-divider" />
+            <p class="sec-lbl" style="margin-bottom:7px;">Powered by</p>
+            <div class="tech-stack">
+              <div class="tech-pill">
+                <div class="tech-pill-dot" style="background:#e8c96a;"></div>
+                <span class="tech-pill-name">faster-whisper</span>
+                <span class="tech-pill-desc">local · free</span>
+              </div>
+              <div class="tech-pill">
+                <div class="tech-pill-dot" style="background:#cc785c;"></div>
+                <span class="tech-pill-name">Claude Sonnet</span>
+                <span class="tech-pill-desc">via Argus</span>
+              </div>
+              <div class="tech-pill">
+                <div class="tech-pill-dot" style="background:#7c6af7;"></div>
+                <span class="tech-pill-name">openpyxl</span>
+                <span class="tech-pill-desc">Excel export</span>
+              </div>
+            </div>
           </div>
 
           <!-- Stage 2 -->
           <div x-show="activeStage===2">
-            <p style="font-size:.92rem;font-weight:700;margin-bottom:4px;">2. LOCALIZE</p>
-            <p style="font-size:.73rem;color:var(--muted);line-height:1.55;margin-bottom:1rem;">
-              Replace character names &amp; places with target-market equivalents.
-            </p>
+            <div class="stage-header-block">
+              <div class="stage-eyebrow">
+                <div class="stage-num">2</div>
+                <span class="stage-label">Localize</span>
+              </div>
+              <div class="stage-title">Name &amp; Place Mapping</div>
+              <p class="stage-desc">Swaps character names, locations, and brand references with target-market equivalents so the story feels native — not translated.</p>
+            </div>
 
             <!-- Mode toggle -->
             <div style="display:flex;gap:5px;margin-bottom:1rem;">
@@ -447,8 +1112,8 @@
 
               <div x-show="localizationRows.length === 0"
                    style="text-align:center;padding:1.2rem 0;color:var(--dim);font-size:.75rem;">
-                <span x-show="!project?.stage1_done">Run Stage 1 first — characters will auto-populate.</span>
-                <span x-show="project?.stage1_done">No characters detected. Add rows manually.</span>
+                <span x-show="!project?.stage1_done">Run Stage 1 first — names will auto-populate.</span>
+                <span x-show="project?.stage1_done">No names detected. Add rows manually.</span>
               </div>
 
               <!-- Column headers -->
@@ -484,6 +1149,11 @@
                       class="btn-primary" style="margin-top:.9rem;width:100%;">
                 Apply Localization
               </button>
+              <button x-show="project?.job_status==='running' && project?.job_stage===2"
+                      @click="cancelJob()"
+                      style="width:100%;background:rgba(185,28,28,.15);color:#f87171;border:1px solid rgba(185,28,28,.4);border-radius:7px;padding:.45rem 1rem;font-size:.84rem;font-weight:600;cursor:pointer;">
+                ■ Cancel
+              </button>
             </div>
 
             <!-- CSV MODE -->
@@ -494,7 +1164,7 @@
                 "John","Johann"<br/>
                 "Central Park","Zentralpark"
               </p>
-              <input type="file" accept=".csv"
+              <input type="file" accept=".csv,.xlsx,.xls"
                      @change="localizationCsv=$event.target.files[0]"
                      style="font-size:.78rem;color:var(--muted);margin-bottom:.8rem;width:100%;" />
               <button @click="runStage2Csv()"
@@ -502,158 +1172,387 @@
                       class="btn-primary" style="width:100%;">
                 Apply Localization
               </button>
+              <button x-show="project?.job_status==='running' && project?.job_stage===2"
+                      @click="cancelJob()"
+                      style="width:100%;background:rgba(185,28,28,.15);color:#f87171;border:1px solid rgba(185,28,28,.4);border-radius:7px;padding:.45rem 1rem;font-size:.84rem;font-weight:600;cursor:pointer;">
+                ■ Cancel
+              </button>
             </div>
           </div>
 
           <!-- Stage 3 -->
           <div x-show="activeStage===3">
-            <p style="font-size:.92rem;font-weight:700;margin-bottom:4px;">3. TTS</p>
-            <p style="font-size:.73rem;color:var(--muted);line-height:1.55;margin-bottom:1rem;">
-              Generate dubbed audio with Microsoft neural voices (edge-tts, free).
-            </p>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-              <p class="sec-lbl" style="margin-bottom:0;">Voice Mapping</p>
-              <button @click="addVoiceRow()" class="btn-ghost" style="color:var(--orange);font-size:.73rem;">+ Add</button>
+            <div class="stage-header-block">
+              <div class="stage-eyebrow">
+                <div class="stage-num">3</div>
+                <span class="stage-label">TTS</span>
+              </div>
+              <div class="stage-title">Voice Synthesis</div>
+              <p class="stage-desc">Generates dubbed audio per segment using ElevenLabs. Auto-rewrites lines that run too long and optimises freeze-frame timing to match the original pacing.</p>
+              <div class="stage-steps">
+                <div class="stage-step"><div class="stage-step-dot"></div>Map each character to an ElevenLabs voice ID</div>
+                <div class="stage-step"><div class="stage-step-dot"></div>Synthesise all segments in parallel (10 workers)</div>
+                <div class="stage-step"><div class="stage-step-dot"></div>Rewrites lines that exceed target duration (up to 3×)</div>
+                <div class="stage-step"><div class="stage-step-dot"></div>Calculates freeze-frame extension per segment</div>
+              </div>
+            </div>
+            <p class="sec-lbl" style="margin-bottom:7px;">Voice Mapping</p>
+
+            <div x-show="voiceRows.length === 0"
+                 style="text-align:center;padding:1.2rem 0;color:var(--dim);font-size:.75rem;">
+              <span x-show="!project?.stage1_done">Run Stage 1 first — characters will auto-populate.</span>
+              <span x-show="project?.stage1_done">No characters detected.</span>
             </div>
 
             <div style="display:grid;gap:5px;margin-bottom:.9rem;">
               <template x-for="(row,i) in voiceRows" :key="i">
-                <div style="display:flex;gap:4px;align-items:center;">
-                  <input x-model="row.char" placeholder="CHARACTER"
-                         class="inp" style="font-family:monospace;font-size:.74rem;padding:.38rem .5rem;" />
-                  <input x-model="row.voice" placeholder="de-DE-KatjaNeural"
-                         class="inp" style="font-family:monospace;font-size:.74rem;padding:.38rem .5rem;" />
-                  <button @click="voiceRows.splice(i,1)" class="loc-del">×</button>
+                <div style="display:flex;gap:6px;align-items:center;">
+                  <span style="font-family:monospace;font-size:.74rem;color:var(--orange);
+                               background:rgba(255,107,53,.08);border:1px solid rgba(255,107,53,.25);
+                               border-radius:4px;padding:.38rem .55rem;white-space:nowrap;min-width:90px;"
+                        x-text="row.char"></span>
+                  <input x-model="row.voice" placeholder="ElevenLabs voice ID"
+                         class="inp" style="font-family:monospace;font-size:.74rem;padding:.38rem .5rem;flex:1;" />
                 </div>
               </template>
             </div>
 
             <div style="font-size:.68rem;color:var(--dim);line-height:1.8;margin-bottom:1rem;">
-              Examples:<br/>
-              <code style="color:var(--orange);">de-DE-KatjaNeural</code> ·
-              <code style="color:var(--orange);">de-DE-ConradNeural</code><br/>
-              <code style="color:var(--orange);">fr-FR-DeniseNeural</code> ·
-              <code style="color:var(--orange);">it-IT-ElsaNeural</code>
+              Use ElevenLabs voice IDs from your dashboard.<br/>
+              <code style="color:var(--orange);">21m00Tcm4TlvDq8ikWAM</code> (Rachel)<br/>
+              <code style="color:var(--orange);">AZnzlk1XvdvUeBnXmlld</code> (Domi)
             </div>
 
-            <button @click="runStage3()"
-                    :disabled="voiceRows.length===0 || project?.job_status==='running'"
-                    class="btn-primary" style="width:100%;">
-              Run Stage 3
-            </button>
-            <a x-show="project?.stage3_done"
-               :href="'/api/projects/'+project?.name+'/files/'+project?.name+'_stage3_dubbed.docx'"
-               class="btn-secondary"
-               style="text-align:center;text-decoration:none;display:block;background:rgba(255,107,53,.07);border-color:rgba(255,107,53,.3);color:var(--orange);">
-              ↓ Dubbed Script (.docx)
-            </a>
+            <div class="stage-actions">
+              <button @click="runStage3()"
+                      :disabled="voiceRows.length===0 || project?.job_status==='running'"
+                      class="btn-primary" style="width:100%;">
+                ▶  Run Stage 3
+              </button>
+              <button x-show="project?.job_status==='running' && project?.job_stage===3"
+                      @click="cancelJob()"
+                      style="width:100%;background:rgba(185,28,28,.12);color:#f87171;border:1px solid rgba(185,28,28,.35);border-radius:8px;padding:.45rem 1rem;font-size:.84rem;font-weight:600;cursor:pointer;">
+                ■ Cancel
+              </button>
+            </div>
+
+            <hr class="stage-divider" />
+            <p class="sec-lbl" style="margin-bottom:7px;">Powered by</p>
+            <div class="tech-stack">
+              <div class="tech-pill">
+                <div class="tech-pill-dot" style="background:#6ee7b7;"></div>
+                <span class="tech-pill-name">ElevenLabs</span>
+                <span class="tech-pill-desc">multilingual v2</span>
+              </div>
+              <div class="tech-pill">
+                <div class="tech-pill-dot" style="background:#cc785c;"></div>
+                <span class="tech-pill-name">Claude Sonnet</span>
+                <span class="tech-pill-desc">line rewrites</span>
+              </div>
+            </div>
           </div>
 
           <!-- Stage 4 -->
           <div x-show="activeStage===4">
-            <p style="font-size:.92rem;font-weight:700;margin-bottom:4px;">4. STITCH &amp; MUX</p>
-            <p style="font-size:.73rem;color:var(--muted);line-height:1.55;margin-bottom:1rem;">
-              Build extended video (freeze frames), stitch TTS audio, mux into final MP4.
-            </p>
-            <div style="display:flex;flex-direction:column;gap:7px;">
+            <div class="stage-header-block">
+              <div class="stage-eyebrow">
+                <div class="stage-num">4</div>
+                <span class="stage-label">Stitch</span>
+              </div>
+              <div class="stage-title">Assemble &amp; Export</div>
+              <p class="stage-desc">Inserts freeze frames wherever dubbed audio runs longer than the original, assembles the full audio track at sample level, then muxes into a final MP4.</p>
+              <div class="stage-steps">
+                <div class="stage-step"><div class="stage-step-dot"></div>Calculates freeze-frame durations per segment</div>
+                <div class="stage-step"><div class="stage-step-dot"></div>Builds extended video with frozen frames (FFmpeg)</div>
+                <div class="stage-step"><div class="stage-step-dot"></div>Stitches dubbed audio at sample level (NumPy)</div>
+                <div class="stage-step"><div class="stage-step-dot"></div>Muxes video + audio into final MP4</div>
+              </div>
+            </div>
+
+            <div class="stage-actions">
               <button @click="runStage(4)" :disabled="project?.job_status==='running'"
                       class="btn-primary" style="width:100%;">
-                Run Stage 4
+                ▶  Run Stage 4
+              </button>
+              <button x-show="project?.job_status==='running' && project?.job_stage===4"
+                      @click="cancelJob()"
+                      style="width:100%;background:rgba(185,28,28,.12);color:#f87171;border:1px solid rgba(185,28,28,.35);border-radius:8px;padding:.45rem 1rem;font-size:.84rem;font-weight:600;cursor:pointer;">
+                ■ Cancel
               </button>
               <a x-show="project?.stage4_done"
-                 :href="'/api/projects/'+project?.name+'/files/'+project?.name+'_'+project?.target_lang+'.mp4'"
-                 style="display:block;text-align:center;text-decoration:none;background:#0a2a14;color:var(--green);border:1px solid #1a4a24;border-radius:7px;padding:.45rem 1rem;font-size:.84rem;font-weight:600;transition:background .15s;"
-                 onmouseenter="this.style.background='#0d3a1c'"
-                 onmouseleave="this.style.background='#0a2a14'">
-                ↓ Download Final Video
+                 :href="'/api/projects/'+project?.name+'/files/'+project?.final_video+'?download=1'"
+                 style="display:flex;align-items:center;justify-content:center;gap:7px;text-align:center;text-decoration:none;background:linear-gradient(135deg,rgba(34,197,94,.15),rgba(16,185,129,.08));color:var(--green);border:1px solid rgba(34,197,94,.35);border-radius:8px;padding:.5rem 1rem;font-size:.84rem;font-weight:700;transition:all .15s;box-shadow:0 0 16px rgba(34,197,94,.1);"
+                 onmouseenter="this.style.borderColor='rgba(34,197,94,.6)';this.style.boxShadow='0 0 22px rgba(34,197,94,.2)'"
+                 onmouseleave="this.style.borderColor='rgba(34,197,94,.35)';this.style.boxShadow='0 0 16px rgba(34,197,94,.1)'">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download Final Video
               </a>
+            </div>
+
+            <hr class="stage-divider" />
+            <p class="sec-lbl" style="margin-bottom:7px;">Powered by</p>
+            <div class="tech-stack">
+              <div class="tech-pill">
+                <div class="tech-pill-dot" style="background:#60a5fa;"></div>
+                <span class="tech-pill-name">FFmpeg</span>
+                <span class="tech-pill-desc">local · free</span>
+              </div>
+              <div class="tech-pill">
+                <div class="tech-pill-dot" style="background:#f59e0b;"></div>
+                <span class="tech-pill-name">NumPy</span>
+                <span class="tech-pill-desc">audio assembly</span>
+              </div>
+              <div class="tech-pill">
+                <div class="tech-pill-dot" style="background:#a78bfa;"></div>
+                <span class="tech-pill-name">pydub</span>
+                <span class="tech-pill-desc">audio processing</span>
+              </div>
             </div>
           </div>
 
         </div><!-- /left-panel -->
 
         <!-- ── CENTER PANEL (logs) ────────────────────────────────────────── -->
-        <div class="center-panel" id="log-panel">
-          <p class="sec-lbl" x-show="logs.length > 0">Output</p>
-          <div x-show="logs.length === 0" class="log-empty">
-            <div style="width:34px;height:34px;border-radius:8px;background:var(--border);display:flex;align-items:center;justify-content:center;margin-bottom:10px;font-size:1rem;color:var(--dim);">⏵</div>
-            <p style="font-weight:500;font-size:.84rem;margin-bottom:4px;">No output yet</p>
-            <p style="color:var(--dim);font-size:.73rem;">Run a stage from the left panel.</p>
+        <div class="center-panel">
+
+          <!-- ── Stat cards ── -->
+          <div class="center-stats">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+
+            <div class="card" style="padding:.75rem 1rem;display:flex;flex-direction:column;gap:5px;position:relative;overflow:hidden;">
+              <span style="font-size:9px;font-weight:700;color:var(--dim);letter-spacing:.13em;text-transform:uppercase;">Elapsed</span>
+              <span x-text="elapsedStr"
+                    style="font-size:1.35rem;font-family:'Cascadia Code','Fira Code',monospace;font-weight:700;letter-spacing:.05em;line-height:1;color:var(--text);">--:--</span>
+              <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(255,107,53,.3),transparent);"></div>
+            </div>
+
+            <div class="card" style="padding:.75rem 1rem;display:flex;flex-direction:column;gap:5px;position:relative;overflow:hidden;">
+              <span style="font-size:9px;font-weight:700;color:var(--dim);letter-spacing:.13em;text-transform:uppercase;">Stage</span>
+              <span x-text="stageStatusLabel"
+                    :class="project?.job_status==='running' ? 'glow-amber running-pulse' : project?.job_status==='error' ? 'glow-red' : project?.stage4_done ? 'glow-green' : ''"
+                    :style="project?.job_status==='running' ? 'color:var(--amber)' : project?.job_status==='error' ? 'color:var(--red)' : project?.stage4_done ? 'color:var(--green)' : 'color:var(--text)'"
+                    style="font-size:1.1rem;font-family:'Cascadia Code','Fira Code',monospace;font-weight:700;line-height:1;">Ready</span>
+              <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(255,107,53,.3),transparent);"></div>
+            </div>
+
+            <div class="card" style="padding:.75rem 1rem;display:flex;flex-direction:column;gap:5px;position:relative;overflow:hidden;">
+              <span style="font-size:9px;font-weight:700;color:var(--dim);letter-spacing:.13em;text-transform:uppercase;">Tokens</span>
+              <span x-text="tokenTotal > 0 ? tokenTotal.toLocaleString() : '0'"
+                    style="font-size:1.35rem;font-family:'Cascadia Code','Fira Code',monospace;font-weight:700;line-height:1;color:var(--text);">0</span>
+              <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(79,158,255,.3),transparent);"></div>
+            </div>
+
+            <div class="card" style="padding:.75rem 1rem;display:flex;flex-direction:column;gap:5px;position:relative;overflow:hidden;">
+              <span style="font-size:9px;font-weight:700;color:var(--dim);letter-spacing:.13em;text-transform:uppercase;">Cost</span>
+              <span x-text="costStr" class="glow-green"
+                    style="font-size:1.35rem;font-family:'Cascadia Code','Fira Code',monospace;font-weight:700;line-height:1;color:var(--green);">$0.00</span>
+              <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(34,197,94,.3),transparent);"></div>
+            </div>
+
           </div>
-          <div>
-            <template x-for="(l,i) in logs" :key="i">
-              <p class="log-line"
-                 :style="l.type==='error' ? 'color:var(--red)' : l.type==='done' ? 'color:var(--green)' : 'color:var(--muted)'"
-                 x-text="l.message"></p>
-            </template>
+          </div><!-- /center-stats -->
+
+          <!-- ── Log terminal ── -->
+          <!-- ── Stage 4 video preview ──────────────────────────────────────── -->
+          <div x-show="activeStage===4 && project?.stage4_done"
+               style="flex-shrink:0;padding:0 14px 10px;">
+            <div style="background:var(--raised);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative;">
+              <!-- Header bar -->
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .9rem;border-bottom:1px solid var(--border);background:var(--surface);">
+                <div style="display:flex;align-items:center;gap:7px;">
+                  <div style="width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px rgba(34,197,94,.7);"></div>
+                  <span style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Output Preview</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:.68rem;color:var(--dim);" x-text="project?.final_video||''"></span>
+                  <a :href="'/api/projects/'+project?.name+'/files/'+project?.final_video+'?download=1'"
+                     style="font-size:.7rem;color:var(--orange);text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:4px;border:1px solid rgba(255,107,53,.25);border-radius:6px;padding:.18rem .55rem;transition:all .15s;"
+                     onmouseenter="this.style.borderColor='rgba(255,107,53,.5)';this.style.background='rgba(255,107,53,.07)'"
+                     onmouseleave="this.style.borderColor='rgba(255,107,53,.25)';this.style.background=''">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Download
+                  </a>
+                </div>
+              </div>
+              <!-- Video element -->
+              <video controls
+                     :src="'/api/projects/'+project?.name+'/files/'+project?.final_video"
+                     style="width:100%;max-height:340px;display:block;background:#000;"
+                     x-effect="if(project?.stage4_done && project?.final_video) $el.load()">
+                Your browser does not support the video tag.
+              </video>
+            </div>
           </div>
-        </div>
+
+          <div class="center-log">
+          <div class="log-terminal">
+
+            <!-- Chrome bar -->
+            <div class="log-chrome">
+              <div class="log-dots">
+                <div class="log-dot" style="background:#ff5f57;box-shadow:0 0 4px rgba(255,95,87,.5);"></div>
+                <div class="log-dot" style="background:#febc2e;box-shadow:0 0 4px rgba(254,188,46,.4);"></div>
+                <div class="log-dot" style="background:#28c840;box-shadow:0 0 4px rgba(40,200,64,.4);"></div>
+              </div>
+              <span style="font-size:.7rem;font-weight:600;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;flex:1;text-align:center;">Live Output</span>
+              <div x-show="project?.job_status==='running'" style="display:flex;align-items:center;gap:6px;">
+                <div class="rec-dot"></div>
+                <span style="font-size:.67rem;color:var(--red);font-weight:600;letter-spacing:.06em;">REC</span>
+              </div>
+              <div x-show="project?.job_status!=='running'" style="font-size:.67rem;color:var(--dim);"
+                   x-text="logs.length > 0 ? logs.length+' lines' : ''"></div>
+            </div>
+
+            <!-- Body -->
+            <div class="log-body" id="log-panel-body">
+
+              <!-- Empty state -->
+              <div x-show="logs.length === 0" class="log-empty-state">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--border2);">
+                  <polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+                <p style="font-size:.8rem;font-weight:500;color:var(--dim);">No output yet</p>
+                <p style="font-size:.71rem;color:var(--border2);">Run a stage to see live logs here.</p>
+              </div>
+
+              <!-- Log lines -->
+              <template x-for="(l,i) in logs" :key="i">
+                <div class="log-entry" :class="logLineClass(l)">
+                  <span class="log-num" x-text="String(i+1).padStart(3,'0')"></span>
+                  <span class="log-icon" x-text="logLineIcon(l)"></span>
+                  <span class="log-msg" x-text="l.message"></span>
+                </div>
+              </template>
+
+            </div>
+          </div><!-- /log-terminal -->
+          </div><!-- /center-log -->
+        </div><!-- /center-panel -->
 
       </div><!-- /two-col -->
 
       <!-- CUE SHEET (full width) -->
       <div class="cue-sheet-panel" x-show="activeStage === 'cue'">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <p style="font-size:.78rem;color:var(--muted);" x-text="segments.length+' segments'"></p>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:.72rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;">Cue Sheet</span>
+            <span style="font-size:.7rem;color:var(--muted);background:var(--raised);border:1px solid var(--border);border-radius:20px;padding:.15rem .65rem;font-weight:600;"
+                  x-text="segments.length+' segs'"></span>
+          </div>
           <div style="display:flex;gap:7px;align-items:center;">
-            <input x-model="segFilter" class="inp" placeholder="Filter character…" style="width:170px;" />
-            <button @click="loadSegments()" class="btn-secondary" style="padding:.38rem .75rem;font-size:.78rem;">Refresh</button>
+            <input x-model="segFilter" class="inp" placeholder="Filter character…" style="width:160px;font-size:.77rem;" />
+            <button @click="loadSegments()" class="btn-secondary" style="padding:.34rem .7rem;font-size:.75rem;">↻</button>
             <a :href="'/api/projects/'+project?.name+'/files/cue_sheet_final.xlsx'"
-               class="btn-secondary" style="padding:.38rem .75rem;font-size:.78rem;text-decoration:none;">
-              ↓ Excel
+               class="btn-secondary" style="padding:.34rem .75rem;font-size:.75rem;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Excel
             </a>
           </div>
         </div>
 
-        <div x-show="segments.length===0" class="card"
-             style="text-align:center;padding:3rem;color:var(--muted);font-size:.83rem;">
+        <!-- Coverage stats bar -->
+        <template x-if="timingStats">
+          <div style="display:flex;align-items:center;gap:10px;padding:.55rem 1rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;flex-wrap:wrap;row-gap:6px;">
+            <span style="font-size:.63rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;">Word Coverage</span>
+            <div style="width:1px;height:12px;background:var(--border);flex-shrink:0;"></div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;"></span>
+              <span style="font-size:.72rem;color:var(--green);font-weight:700;" x-text="timingStats.ok"></span>
+              <span style="font-size:.65rem;color:var(--dim);">fit</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0;"></span>
+              <span style="font-size:.72rem;color:var(--amber);font-weight:700;" x-text="timingStats.amber"></span>
+              <span style="font-size:.65rem;color:var(--dim);">+0–25%</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0;"></span>
+              <span style="font-size:.72rem;color:var(--red);font-weight:700;" x-text="timingStats.red"></span>
+              <span style="font-size:.65rem;color:var(--dim);">&gt;25% over</span>
+            </div>
+            <div style="width:1px;height:12px;background:var(--border);flex-shrink:0;"></div>
+            <span style="font-size:.65rem;color:var(--dim);">avg&nbsp;<span style="font-weight:700;font-family:'Cascadia Code','Fira Code',monospace;"
+              :style="timingStats.avg>1.25?'color:var(--red)':timingStats.avg>1.0?'color:var(--amber)':'color:var(--green)'"
+              x-text="timingStats.avg.toFixed(2)+'×'"></span></span>
+            <template x-if="timingStats.ttsTotal > 0">
+              <div style="display:flex;align-items:center;gap:10px;margin-left:2px;">
+                <div style="width:1px;height:12px;background:var(--border);flex-shrink:0;"></div>
+                <span style="font-size:.63rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;">TTS</span>
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <span style="width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;"></span>
+                  <span style="font-size:.72rem;color:var(--green);font-weight:700;" x-text="timingStats.ttsTotal - timingStats.ttsOver"></span>
+                  <span style="font-size:.65rem;color:var(--dim);">on time</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <span style="width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0;"></span>
+                  <span style="font-size:.72rem;color:var(--amber);font-weight:700;" x-text="timingStats.ttsOver"></span>
+                  <span style="font-size:.65rem;color:var(--dim);">over</span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <div x-show="segments.length===0"
+             style="text-align:center;padding:3.5rem 2rem;color:var(--dim);font-size:.82rem;background:var(--surface);border:1px dashed var(--border2);border-radius:12px;">
+          <div style="font-size:1.6rem;margin-bottom:.6rem;opacity:.35;">♩</div>
           Run Stage 1 to populate the cue sheet.
         </div>
 
-        <div style="display:grid;gap:7px;">
+        <div style="display:grid;gap:6px;">
           <template x-for="seg in filteredSegments" :key="seg.id">
-            <div class="card" style="padding:.85rem .95rem;transition:border-color .15s;"
-                 onmouseenter="this.style.borderColor='var(--border2)'"
-                 onmouseleave="this.style.borderColor='var(--border)'">
-              <div style="display:flex;gap:10px;align-items:flex-start;">
-                <div style="width:50px;flex-shrink:0;text-align:right;">
-                  <p style="font-size:.7rem;font-family:monospace;font-weight:700;color:var(--orange);" x-text="'#'+seg.id"></p>
-                  <p style="font-size:.64rem;font-family:monospace;color:var(--dim);" x-text="fmtTime(seg.start)"></p>
-                  <p style="font-size:.64rem;font-family:monospace;color:var(--dim);" x-text="fmtTime(seg.end)"></p>
+            <div class="cue-row">
+              <!-- Top strip: id + timecodes + character + duration -->
+              <div style="display:flex;align-items:center;gap:10px;padding:.6rem .95rem .45rem;border-bottom:1px solid var(--border);">
+                <!-- Segment number -->
+                <span style="font-family:'Cascadia Code','Fira Code',monospace;font-size:.65rem;font-weight:700;color:var(--orange);min-width:28px;"
+                      x-text="'#'+seg.id"></span>
+                <!-- Timecodes -->
+                <div class="cue-tc" style="display:flex;gap:4px;align-items:center;">
+                  <span x-text="fmtTime(seg.start)"></span>
+                  <span style="opacity:.35;">→</span>
+                  <span x-text="fmtTime(seg.end)"></span>
                 </div>
-                <div style="padding-top:1px;">
-                  <span style="font-size:.65rem;font-family:monospace;font-weight:700;background:rgba(255,107,53,.12);color:var(--orange);border:1px solid rgba(255,107,53,.25);border-radius:5px;padding:2px 6px;"
-                        x-text="seg.character"></span>
-                </div>
-                <div style="flex:1;min-width:0;">
-                  <p style="font-size:.73rem;color:var(--dim);margin-bottom:4px;line-height:1.5;" x-text="seg.text"></p>
-                  <div x-show="getBestTranslation(seg)" style="display:flex;gap:7px;align-items:flex-start;">
-                    <p style="font-size:.8rem;color:var(--text);font-weight:500;line-height:1.5;"
-                       x-text="getBestTranslation(seg)"></p>
-                    <button @click="editSeg=seg;editText=getBestTranslation(seg)"
-                            style="font-size:.7rem;color:var(--dim);background:none;border:none;cursor:pointer;white-space:nowrap;flex-shrink:0;"
-                            onmouseenter="this.style.color='var(--orange)'"
-                            onmouseleave="this.style.color='var(--dim)'">Edit</button>
+                <!-- Character badge -->
+                <span class="cue-char-badge" x-text="seg.character"></span>
+                <!-- Spacer -->
+                <div style="flex:1;"></div>
+                <!-- Duration / TTS status -->
+                <template x-if="seg.dub?.status==='done'">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="font-family:'Cascadia Code','Fira Code',monospace;font-size:.68rem;font-weight:700;"
+                          :style="Math.abs((seg.dub.actual_duration||0)-(seg.dub.target_duration||0))>.5?'color:var(--amber)':'color:var(--green)'"
+                          x-text="(seg.dub.actual_duration||0).toFixed(2)+'s'"></span>
+                    <span style="font-size:.63rem;color:var(--dim);" x-text="'/ '+(seg.dub.target_duration||0).toFixed(2)+'s'"></span>
+                    <span x-show="seg.dub.extend_by>0"
+                          style="font-size:.6rem;color:var(--amber);background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:4px;padding:1px 5px;"
+                          x-text="'❄ +'+seg.dub.extend_by.toFixed(1)+'s'"></span>
+                    <button @click="regenTTS(seg.id)" :disabled="project?.job_status==='running'"
+                            style="font-size:.62rem;color:var(--dim);background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;padding:2px 7px;transition:all .15s;"
+                            onmouseenter="this.style.borderColor='rgba(255,107,53,.5)';this.style.color='var(--orange)'"
+                            onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">↺ Regen</button>
                   </div>
+                </template>
+                <template x-if="seg.dub?.status==='error'">
+                  <span style="font-size:.68rem;color:var(--red);font-weight:600;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:5px;padding:2px 7px;">error</span>
+                </template>
+              </div>
+              <!-- Body: original text + translation -->
+              <div style="padding:.55rem .95rem .65rem;display:grid;gap:6px;">
+                <!-- Original -->
+                <div style="display:flex;gap:8px;align-items:baseline;">
+                  <span style="font-size:.6rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;min-width:26px;padding-top:1px;">EN</span>
+                  <p style="font-size:.75rem;color:var(--dim);line-height:1.55;flex:1;" x-text="seg.text"></p>
                 </div>
-                <div style="text-align:right;flex-shrink:0;">
-                  <template x-if="seg.dub?.status==='done'">
-                    <div>
-                      <p style="font-size:.73rem;font-family:monospace;font-weight:600;"
-                         :style="Math.abs((seg.dub.actual_duration||0)-(seg.dub.target_duration||0))>.5?'color:var(--amber)':'color:var(--green)'"
-                         x-text="(seg.dub.actual_duration||0).toFixed(2)+'s'"></p>
-                      <p style="font-size:.65rem;color:var(--dim);" x-text="'/ '+(seg.dub.target_duration||0).toFixed(2)+'s'"></p>
-                      <p x-show="seg.dub.extend_by>0" style="font-size:.65rem;color:var(--amber);margin-top:2px;"
-                         x-text="'freeze +'+seg.dub.extend_by.toFixed(1)+'s'"></p>
-                      <button @click="regenTTS(seg.id)" :disabled="project?.job_status==='running'"
-                              style="font-size:.65rem;color:var(--dim);background:none;border:none;cursor:pointer;margin-top:3px;display:block;margin-left:auto;"
-                              onmouseenter="this.style.color='var(--orange)'"
-                              onmouseleave="this.style.color='var(--dim)'">Regen TTS</button>
-                    </div>
-                  </template>
-                  <template x-if="seg.dub?.status==='error'">
-                    <span style="font-size:.7rem;color:var(--red);font-weight:600;">error</span>
-                  </template>
+                <!-- Translation -->
+                <div x-show="getBestTranslation(seg)" style="display:flex;gap:8px;align-items:baseline;">
+                  <span style="font-size:.6rem;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.07em;min-width:26px;padding-top:1px;"
+                        x-text="(project?.target_lang||'IT').toUpperCase()"></span>
+                  <p style="font-size:.8rem;color:var(--text);font-weight:500;line-height:1.55;flex:1;" x-text="getBestTranslation(seg)"></p>
+                  <button @click="editSeg=seg;editText=getBestTranslation(seg)"
+                          style="font-size:.65rem;color:var(--dim);background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;padding:2px 7px;white-space:nowrap;flex-shrink:0;transition:all .15s;"
+                          onmouseenter="this.style.borderColor='rgba(255,107,53,.5)';this.style.color='var(--orange)'"
+                          onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">✎ Edit</button>
                 </div>
               </div>
             </div>
@@ -695,6 +1594,22 @@
   </div>
 </div>
 
+<!-- ── Confirm modal ─────────────────────────────────────────────────────── -->
+<div x-show="confirmDialog.open" x-cloak
+     style="position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100;padding:1rem;backdrop-filter:blur(4px);">
+  <div class="card" style="padding:1.5rem;width:100%;max-width:360px;">
+    <p x-text="confirmDialog.title" style="font-weight:700;font-size:.95rem;margin-bottom:.5rem;"></p>
+    <p x-text="confirmDialog.message" style="font-size:.8rem;color:var(--muted);line-height:1.55;margin-bottom:1.3rem;"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button @click="confirmResolve(false)" class="btn-secondary" style="padding:.4rem 1rem;font-size:.82rem;">No</button>
+      <button @click="confirmResolve(true)"
+              :style="confirmDialog.danger ? 'background:#b91c1c;border-color:#991b1b;' : ''"
+              class="btn-primary" style="padding:.4rem 1rem;font-size:.82rem;"
+              x-text="confirmDialog.confirmText"></button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Edit segment modal ────────────────────────────────────────────────── -->
 <div x-show="editSeg"
      style="position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:50;padding:1rem;backdrop-filter:blur(4px);">
@@ -717,7 +1632,7 @@ function app() {
   return {
     // Navigation
     view: 'home', projects: [], project: null,
-    deleteConfirm: null,
+    deleteConfirm: null, projectFilter: '', langFilter: '',
 
     // Stage state
     activeStage: 1,
@@ -726,8 +1641,10 @@ function app() {
       { n:3, label:'TTS' },    { n:4, label:'STITCH' }
     ],
 
-    // Logs
-    logs: [],
+    // Logs — keyed by stage number
+    stageLogs: {1:[], 2:[], 3:[], 4:[]},
+
+    get logs() { return this.stageLogs[this.activeStage] || []; },
 
     // Segments (cue sheet)
     segments: [], segFilter: '', editSeg: null, editText: '',
@@ -738,16 +1655,19 @@ function app() {
     localizationRows: [],
 
     // Stage 3 voice config
-    voiceRows: [{ char: 'default', voice: '' }],
+    voiceRows: [],
 
     // Create project form
     creating: false, createError: '',
-    newProject: { name: '', target_lang: 'de', videoFile: null },
+    newProject: { name: '', target_lang: 'it', videoFile: null },
+
+    // Confirm dialog
+    confirmDialog: { open: false, title: '', message: '', confirmText: 'Confirm', danger: false, _resolve: null },
 
     // Header stats
     elapsedStr: '--:--',
     tokenIn: 0, tokenOut: 0,
-    _timerHandle: null, _timerStart: null,
+    _timerHandle: null, _timerStart: null, _eventSource: null,
 
     get tokenTotal() { return this.tokenIn + this.tokenOut; },
 
@@ -774,7 +1694,54 @@ function app() {
 
     // ── Init ──────────────────────────────────────────────────────────────────
     async init() {
-      await this.loadProjects();
+      startSplashCanvas();
+      startHomeCanvas();
+
+      // Rotating loading tips
+      const tips = [
+        '🎙 Loading voice engine…',
+        '🌍 Preparing language models…',
+        '✂️ Initialising audio pipeline…',
+        '🎬 Getting your projects ready…',
+        '🔊 Warming up ElevenLabs TTS…',
+        '📝 Syncing cue sheet engine…',
+      ];
+      const tipEl = document.getElementById('splash-tip');
+      let tipIdx = 0;
+      if (tipEl) {
+        tipEl.textContent = tips[0];
+        const tipTimer = setInterval(() => {
+          tipIdx = (tipIdx + 1) % tips.length;
+          tipEl.style.opacity = '0';
+          setTimeout(() => {
+            if (tipEl) { tipEl.textContent = tips[tipIdx]; tipEl.style.opacity = '1'; }
+          }, 400);
+        }, 1400);
+        setTimeout(() => clearInterval(tipTimer), 5000);
+      }
+
+      // Splash: keep for 5 seconds, drive percentage counter off the fill bar
+      const pctEl = document.getElementById('splash-pct');
+      const TOTAL = 5000;
+      const tick = 80;
+      let elapsed = 0;
+      const pctTimer = setInterval(() => {
+        elapsed += tick;
+        const raw = elapsed / TOTAL;
+        // Ease: fast early, slow near end (mirrors CSS cubic-bezier)
+        const eased = raw < .6 ? raw / .6 * .7 : .7 + (raw - .6) / .4 * .3;
+        if (pctEl) pctEl.textContent = Math.min(100, Math.round(eased * 100)) + '%';
+        if (elapsed >= TOTAL) clearInterval(pctTimer);
+      }, tick);
+
+      // Load data in parallel with the timer; wait whichever is longer
+      const [, ] = await Promise.all([
+        this.loadProjects(),
+        new Promise(r => setTimeout(r, TOTAL))
+      ]);
+
+      const s = document.getElementById('splash-screen');
+      if (s) { s.classList.add('splash-out'); setTimeout(() => s.remove(), 560); }
     },
 
     async loadProjects() {
@@ -782,7 +1749,7 @@ function app() {
     },
 
     goHome() {
-      this.view = 'home';
+      this.view = 'projects';
       this.stopTimer();
       this.loadProjects();
     },
@@ -807,9 +1774,11 @@ function app() {
 
     async switchStage(n) {
       this.activeStage = n;
-      this.logs = [];
       if (n === 2 && this.project?.stage1_done) {
         await this.loadLocalizationRows();
+      }
+      if (n === 3 && this.project?.stage1_done) {
+        await this.loadVoiceRows();
       }
     },
 
@@ -822,9 +1791,25 @@ function app() {
       const chars = data.characters || {};
       const skip = new Set(['NARRATOR', 'UNKNOWN', '?']);
       const existing = new Set(this.localizationRows.map(x => x.original));
-      for (const c of Object.keys(chars)) {
-        if (!skip.has(c) && !existing.has(c)) {
-          this.localizationRows.push({ original: c, localized: '', manual: false });
+
+      const namedChars = Object.keys(chars).filter(c => !skip.has(c));
+      if (namedChars.length > 0) {
+        // Named speaking characters detected — show them
+        for (const c of namedChars) {
+          if (!existing.has(c)) {
+            this.localizationRows.push({ original: c, localized: '', manual: false });
+          }
+        }
+      } else {
+        // All NARRATOR/UNKNOWN — extract names from source text instead
+        const nr = await fetch(`/api/projects/${this.project.name}/name-candidates`);
+        if (nr.ok) {
+          const nd = await nr.json();
+          for (const name of (nd.names || [])) {
+            if (!existing.has(name)) {
+              this.localizationRows.push({ original: name, localized: '', manual: false });
+            }
+          }
         }
       }
     },
@@ -833,11 +1818,48 @@ function app() {
       this.localizationRows.push({ original: '', localized: '', manual: true });
     },
 
+    // ── Voice rows (Stage 3) ──────────────────────────────────────────────────
+    async loadVoiceRows() {
+      if (!this.project) return;
+      const r = await fetch(`/api/projects/${this.project.name}/characters`);
+      if (!r.ok) return;
+      const data = await r.json();
+      const chars = data.characters || {};
+      const existing = new Map(this.voiceRows.map(x => [x.char.toUpperCase(), x.voice]));
+      const skip = new Set(['UNKNOWN', '?']);
+      const rows = [];
+      for (const c of Object.keys(chars)) {
+        if (!skip.has(c)) {
+          rows.push({ char: c, voice: existing.get(c.toUpperCase()) || '' });
+        }
+      }
+      if (rows.length) this.voiceRows = rows;
+    },
+
     // ── Segments ──────────────────────────────────────────────────────────────
     async loadSegments() {
       if (!this.project) return;
       const r = await fetch(`/api/projects/${this.project.name}/segments`);
       if (r.ok) this.segments = await r.json();
+    },
+
+    get projectLangs() {
+      const seen = new Set();
+      return this.projects.map(p => ({ code: p.target_lang, name: p.target_lang_name || p.target_lang }))
+        .filter(l => l.code && !seen.has(l.code) && seen.add(l.code));
+    },
+
+    get filteredProjects() {
+      return this.projects.filter(p => {
+        const matchText = !this.projectFilter || (() => {
+          const f = this.projectFilter.toLowerCase();
+          return p.name?.toLowerCase().includes(f) ||
+            p.video_filename?.toLowerCase().includes(f) ||
+            (p.target_lang_name||p.target_lang||'').toLowerCase().includes(f);
+        })();
+        const matchLang = !this.langFilter || p.target_lang === this.langFilter;
+        return matchText && matchLang;
+      });
     },
 
     get filteredSegments() {
@@ -883,13 +1905,47 @@ function app() {
         await this.loadProjects();
         await this.openProject(this.newProject.name);
         this.newProject = { name: '', target_lang: 'de', videoFile: null };
+        if (this.$refs.videoFileInput) this.$refs.videoFileInput.value = '';
       } catch(e) { this.createError = String(e); }
       finally { this.creating = false; }
     },
 
+    // ── Confirm dialog helpers ────────────────────────────────────────────────
+    askConfirm(title, message, confirmText = 'Confirm', danger = false) {
+      return new Promise((resolve) => {
+        this.confirmDialog = { open: true, title, message, confirmText, danger, _resolve: resolve };
+      });
+    },
+
+    confirmResolve(val) {
+      this.confirmDialog.open = false;
+      if (this.confirmDialog._resolve) this.confirmDialog._resolve(val);
+    },
+
+    async cancelJob() {
+      const ok = await this.askConfirm(
+        'Cancel running stage?',
+        'The current in-progress batch will finish but no new work will start.',
+        'Cancel Stage', true
+      );
+      if (!ok) return;
+      const r = await fetch(`/api/projects/${this.project.name}/cancel`, { method: 'POST' });
+      if (r.ok) {
+        if (this._eventSource) { this._eventSource.close(); this._eventSource = null; }
+        this.stopTimer();
+        this.project.job_status = 'cancelled';
+        const stageN = this.project.job_stage || this.activeStage;
+        if (!this.stageLogs[stageN]) this.stageLogs[stageN] = [];
+        this.stageLogs[stageN].push({ type: 'error', message: 'Cancelled by user' });
+      }
+    },
+
     // ── Stage runners ─────────────────────────────────────────────────────────
     async runStage(n) {
-      this.logs = [];
+      const labels = {1:'Script (transcription + translation)', 2:'Localize', 3:'TTS voice generation', 4:'Stitch & Mux final video'};
+      const ok = await this.askConfirm(`Run Stage ${n}?`, `This will run: ${labels[n] || 'stage '+n}.`, 'Run');
+      if (!ok) return;
+      this.stageLogs[n] = [];
       const r = await fetch(`/api/projects/${this.project.name}/stage${n}`, { method: 'POST' });
       if (!r.ok) { alert((await r.json()).detail); return; }
       this.project.job_status = 'running'; this.project.job_stage = n;
@@ -899,10 +1955,12 @@ function app() {
     async runStage2Inline() {
       const reps = this.localizationRows.filter(r => r.original && r.localized && r.original !== r.localized);
       if (!reps.length) {
-        alert('No replacements to apply — fill in at least one Localized name.');
+        await this.askConfirm('No replacements', 'Fill in at least one Localized name before running.', 'OK');
         return;
       }
-      this.logs = [];
+      const ok = await this.askConfirm('Apply Localization?', `Will apply ${reps.length} name replacement(s) to all translations.`, 'Apply');
+      if (!ok) return;
+      this.stageLogs[2] = [];
       const r = await fetch(`/api/projects/${this.project.name}/stage2/inline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -915,7 +1973,9 @@ function app() {
 
     async runStage2Csv() {
       if (!this.localizationCsv) return;
-      this.logs = [];
+      const ok = await this.askConfirm('Apply Localization?', `Will apply replacements from "${this.localizationCsv.name}" to all translations.`, 'Apply');
+      if (!ok) return;
+      this.stageLogs[2] = [];
       const fd = new FormData(); fd.append('localization_csv', this.localizationCsv);
       const r = await fetch(`/api/projects/${this.project.name}/stage2`, { method: 'POST', body: fd });
       if (!r.ok) { alert((await r.json()).detail); return; }
@@ -929,7 +1989,9 @@ function app() {
       for (const row of this.voiceRows) {
         if (row.char && row.voice) voice_config[row.char] = row.voice;
       }
-      this.logs = [];
+      const ok = await this.askConfirm('Run Stage 3: TTS?', `Will generate dubbed audio for all segments using ${Object.keys(voice_config).length} voice(s).`, 'Run');
+      if (!ok) return;
+      this.stageLogs[3] = [];
       const r = await fetch(`/api/projects/${this.project.name}/stage3`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -958,7 +2020,11 @@ function app() {
 
     // ── SSE log stream ────────────────────────────────────────────────────────
     streamLogs() {
+      if (this._eventSource) { this._eventSource.close(); this._eventSource = null; }
       const es = new EventSource(`/api/projects/${this.project.name}/logs`);
+      this._eventSource = es;
+      const stageN = this.project.job_stage || this.activeStage;
+
       es.onmessage = (e) => {
         const msg = JSON.parse(e.data);
 
@@ -970,23 +2036,24 @@ function app() {
           return;
         }
 
-        this.logs.push(msg);
+        if (!this.stageLogs[stageN]) this.stageLogs[stageN] = [];
+        this.stageLogs[stageN].push(msg);
 
         // Auto-scroll log panel
         this.$nextTick(() => {
-          const p = document.getElementById('log-panel');
+          const p = document.getElementById('log-panel-body');
           if (p) p.scrollTop = p.scrollHeight;
         });
 
         if (msg.type === 'done' || msg.type === 'error') {
-          es.close();
+          es.close(); this._eventSource = null;
           this.stopTimer();
           this.project.job_status = msg.type === 'done' ? 'done' : 'error';
           this.refreshProject();
           this.loadSegments();
         }
       };
-      es.onerror = () => { es.close(); this.stopTimer(); };
+      es.onerror = () => { es.close(); this._eventSource = null; this.stopTimer(); this.refreshProject(); };
     },
 
     async refreshProject() {
@@ -1008,6 +2075,24 @@ function app() {
     getBestTranslation(seg) {
       const t = seg.translations || {}, lang = this.project?.target_lang || 'de';
       return t[`llm_${lang}_local`] || t[`llm_${lang}`] || t[`google_${lang}_local`] || t[`google_${lang}`] || '';
+    },
+
+    wordRatio(seg) {
+      const enW = (seg.text || '').trim().split(/\s+/).filter(w => w).length;
+      const fr  = (this.getBestTranslation(seg) || '').trim().split(/\s+/).filter(w => w).length;
+      return enW ? fr / enW : 1;
+    },
+
+    get timingStats() {
+      const segs = this.segments.filter(s => this.getBestTranslation(s));
+      if (!segs.length) return null;
+      const ok    = segs.filter(s => this.wordRatio(s) <= 1.0).length;
+      const amber = segs.filter(s => { const r = this.wordRatio(s); return r > 1.0 && r <= 1.25; }).length;
+      const red   = segs.filter(s => this.wordRatio(s) > 1.25).length;
+      const avg   = segs.reduce((a, s) => a + this.wordRatio(s), 0) / segs.length;
+      const ttsDone = this.segments.filter(s => s.dub?.status === 'done');
+      const ttsOver = ttsDone.filter(s => (s.dub.actual_duration || 0) > (s.dub.target_duration || 0) + 0.3).length;
+      return { ok, amber, red, avg, total: segs.length, ttsTotal: ttsDone.length, ttsOver };
     },
 
     async saveEdit() {
@@ -1036,7 +2121,180 @@ function app() {
       const m = Math.floor(s / 60), sec = (s % 60).toFixed(1);
       return `${m}:${sec.padStart(4,'0')}`;
     },
+
+    // ── Log line classification ───────────────────────────────────────────────
+    logLineClass(l) {
+      const msg = l.message || '';
+      if (l.type === 'done')  return 'log-type-done';
+      if (l.type === 'error') return 'log-type-error';
+      if (msg.startsWith('===')) return 'log-type-section';
+      if (/^\s*\d[a-z]\./i.test(msg)) return 'log-type-step';
+      if (/\b(done|complete|✓|→)\b/i.test(msg) && !/failed|error/i.test(msg)) return 'log-type-ok';
+      if (/\b(warning|warn)\b/i.test(msg)) return 'log-type-warn';
+      if (/\b(failed|error)\b/i.test(msg)) return 'log-type-error';
+      return 'log-type-info';
+    },
+
+    logLineIcon(l) {
+      const msg = l.message || '';
+      if (l.type === 'done')  return '✓';
+      if (l.type === 'error') return '✕';
+      if (msg.startsWith('===')) return '§';
+      if (/^\s*\d[a-z]\./i.test(msg)) return '›';
+      if (/\b(done|complete|→)\b/i.test(msg) && !/failed|error/i.test(msg)) return '✓';
+      if (/\b(warning|warn)\b/i.test(msg)) return '⚠';
+      if (/\b(failed|error)\b/i.test(msg)) return '✕';
+      return ' ';
+    },
   };
+}
+
+/* ── Splash canvas ───────────────────────────────────────────────────────── */
+function startSplashCanvas() {
+  const c = document.getElementById('splash-canvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  let W, H, orbs = [], raf;
+
+  function resize() {
+    W = c.width = window.innerWidth;
+    H = c.height = window.innerHeight;
+  }
+
+  const ORB_COLORS = [
+    'rgba(255,107,53,', 'rgba(120,80,255,',
+  ];
+
+  function mkOrb() {
+    const r = 60 + Math.random() * 160;
+    return {
+      x: Math.random() * W, y: Math.random() * H,
+      r,
+      vx: (Math.random() - .5) * .35,
+      vy: (Math.random() - .5) * .35,
+      hue: ORB_COLORS[Math.floor(Math.random() * ORB_COLORS.length)],
+      alpha: .06 + Math.random() * .09,
+    };
+  }
+
+  resize();
+  window.addEventListener('resize', resize);
+  for (let i = 0; i < 18; i++) orbs.push(mkOrb());
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    for (const o of orbs) {
+      const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
+      g.addColorStop(0, o.hue + o.alpha + ')');
+      g.addColorStop(1, o.hue + '0)');
+      ctx.beginPath();
+      ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+      o.x += o.vx; o.y += o.vy;
+      if (o.x < -o.r) o.x = W + o.r;
+      if (o.x > W + o.r) o.x = -o.r;
+      if (o.y < -o.r) o.y = H + o.r;
+      if (o.y > H + o.r) o.y = -o.r;
+    }
+    // subtle grid lines
+    ctx.strokeStyle = 'rgba(255,255,255,.02)';
+    ctx.lineWidth = 1;
+    const step = 60;
+    for (let x = 0; x < W; x += step) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for (let y = 0; y < H; y += step) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    raf = requestAnimationFrame(draw);
+  }
+  draw();
+
+  const obs = new MutationObserver(() => {
+    if (!document.getElementById('splash-canvas')) { cancelAnimationFrame(raf); obs.disconnect(); }
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+}
+
+/* ── Home canvas — drifting particle field ──────────────────────────────── */
+function startHomeCanvas() {
+  const c = document.getElementById('home-canvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  let W, H, pts = [], raf, active = false;
+
+  function resize() {
+    W = c.width = window.innerWidth;
+    H = c.height = window.innerHeight;
+  }
+
+  function mkPt() {
+    return {
+      x: Math.random() * W, y: Math.random() * H,
+      r: .8 + Math.random() * 1.6,
+      vx: (Math.random() - .5) * .25,
+      vy: (Math.random() - .5) * .25,
+      alpha: .15 + Math.random() * .35,
+      orange: Math.random() < .55,
+    };
+  }
+
+  resize();
+  window.addEventListener('resize', resize);
+  for (let i = 0; i < 90; i++) pts.push(mkPt());
+
+  function draw() {
+    if (!document.getElementById('home-canvas')) { cancelAnimationFrame(raf); return; }
+    ctx.clearRect(0, 0, W, H);
+
+    // Soft orbs in corners
+    const orbs = [
+      { x: W * .15, y: H * .2,  r: 260, col: 'rgba(255,107,53,' },
+      { x: W * .85, y: H * .75, r: 200, col: 'rgba(120,80,255,' },
+      { x: W * .5,  y: H * .9,  r: 180, col: 'rgba(255,107,53,' },
+    ];
+    for (const o of orbs) {
+      const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
+      g.addColorStop(0, o.col + '.055)');
+      g.addColorStop(1, o.col + '0)');
+      ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+      ctx.fillStyle = g; ctx.fill();
+    }
+
+    // Particles + connections
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.orange ? `rgba(255,107,53,${p.alpha})` : `rgba(200,180,255,${p.alpha * .6})`;
+      ctx.fill();
+      for (let j = i + 1; j < pts.length; j++) {
+        const q = pts[j];
+        const dx = p.x - q.x, dy = p.y - q.y;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d < 110) {
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y);
+          ctx.strokeStyle = `rgba(255,107,53,${.07 * (1 - d/110)})`;
+          ctx.lineWidth = .5; ctx.stroke();
+        }
+      }
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+    }
+    raf = requestAnimationFrame(draw);
+  }
+
+  // Only animate when home view is visible (Alpine x-show sets display:none on parent)
+  function checkVisibility() {
+    const canvas = document.getElementById('home-canvas');
+    if (!canvas) return;
+    const parent = canvas.closest('.scroll-view');
+    const visible = parent ? parent.style.display !== 'none' && parent.offsetParent !== null : false;
+    if (visible && !active) { active = true; draw(); }
+    else if (!visible && active) { active = false; cancelAnimationFrame(raf); }
+  }
+
+  setInterval(checkVisibility, 300);
+  checkVisibility();
 }
 </script>
 </body>

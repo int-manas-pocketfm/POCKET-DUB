@@ -13,22 +13,20 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable
 
-import anthropic
+from argus import make_client
 import numpy as np
 from dotenv import load_dotenv
 from pydub import AudioSegment
 
 load_dotenv()
 
-ARGUS_API_KEY = os.getenv("ARGUS_API_KEY")
-ARGUS_BASE_URL = os.getenv("ARGUS_BASE_URL", "https://api.anthropic.com")
-ARGUS_MODEL = os.getenv("ARGUS_MODEL", "claude-opus-4-5")
+ARGUS_MODEL = os.getenv("ARGUS_MODEL", "claude-sonnet-4-6")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
 TTS_WORKERS = 10
 TTS_TOLERANCE = 0.3      # seconds — acceptable duration mismatch
 MAX_REWRITE_ITERS = 3    # max LLM rewrite attempts per segment
-EXTEND_DROP_THRESHOLD = 0.5  # seconds — brief overruns are acceptable
+EXTEND_DROP_THRESHOLD = 0.15  # seconds — brief overruns are acceptable
 
 SAMPLE_RATE = 44100
 AUDIO_BITRATE = "192k"
@@ -49,21 +47,21 @@ def run_stage3_tts(project_dir: Path, target_lang: str, voice_config: dict, log_
         json.dumps(voice_config, indent=2)
     )
 
-    raw = json.loads((project_dir / "segments.json").read_text())
+    raw = json.loads((project_dir / "segments.json").read_text(encoding="utf-8-sig"))
     segments = raw.get("merged", raw) if isinstance(raw, dict) else raw
-    translations = json.loads((project_dir / "translations.json").read_text())
+    translations = json.loads((project_dir / "translations.json").read_text(encoding="utf-8-sig"))
 
     audio_dir = project_dir / "segments_audio"
     audio_dir.mkdir(exist_ok=True)
 
     dub_path = project_dir / "dub_state.json"
-    dub_state: dict = json.loads(dub_path.read_text()) if dub_path.exists() else {}
+    dub_state: dict = json.loads(dub_path.read_text(encoding="utf-8-sig")) if dub_path.exists() else {}
 
     # Pre-populate character info from characters_final
     chars: dict = {}
     chars_path = project_dir / "characters_final.json"
     if chars_path.exists():
-        chars = json.loads(chars_path.read_text())
+        chars = json.loads(chars_path.read_text(encoding="utf-8-sig"))
 
     # Segments still needing TTS
     pending = [i for i in range(len(segments))
@@ -75,7 +73,7 @@ def run_stage3_tts(project_dir: Path, target_lang: str, voice_config: dict, log_
 
     log_fn(f"Generating TTS for {len(pending)} segments ({TTS_WORKERS} parallel workers)...")
 
-    argus_client = anthropic.Anthropic(api_key=ARGUS_API_KEY, base_url=ARGUS_BASE_URL)
+    argus_client = make_client()
     lang_name = LANG_NAMES.get(target_lang, target_lang)
 
     def process(i: int) -> tuple[str, dict]:
@@ -96,13 +94,10 @@ def run_stage3_tts(project_dir: Path, target_lang: str, voice_config: dict, log_
         if not text:
             return sid, {"status": "error", "error": "No translation text available"}
 
-        # Pick voice
-        char = "UNKNOWN"
-        for src_id in seg.get("source_ids", [i]):
-            if str(src_id) in chars:
-                char = chars[str(src_id)]
-                break
-        voice_id = voice_config.get(char) or voice_config.get("default") or list(voice_config.values())[0]
+        # Pick voice — characters_final.json is keyed by merged segment index
+        char = chars.get(str(i), "UNKNOWN")
+        vc_lower = {k.lower(): v for k, v in voice_config.items()}
+        voice_id = vc_lower.get(char.lower()) or vc_lower.get("default") or list(voice_config.values())[0]
 
         target_dur = seg["end"] - seg["start"]
         english = seg.get("text", "")
@@ -112,9 +107,9 @@ def run_stage3_tts(project_dir: Path, target_lang: str, voice_config: dict, log_
         iterations = 0
 
         for attempt in range(MAX_REWRITE_ITERS + 1):
-            ok = _generate_tts(current_text, voice_id, audio_file)
+            ok, tts_err = _generate_tts(current_text, voice_id, audio_file)
             if not ok:
-                return sid, {"status": "error", "error": "edge-tts generation failed"}
+                return sid, {"status": "error", "error": f"TTS failed: {tts_err}"}
 
             actual_dur = _mp3_duration(audio_file)
             diff = actual_dur - target_dur
@@ -133,6 +128,10 @@ def run_stage3_tts(project_dir: Path, target_lang: str, voice_config: dict, log_
             if rewritten:
                 current_text = rewritten
 
+        # Tempo-fit: stretch/compress audio to reduce gaps and freeze frames
+        if actual_dur:
+            actual_dur = _adjust_audio_tempo(audio_file, target_dur, actual_dur)
+
         extend_by = max(0.0, actual_dur - target_dur - EXTEND_DROP_THRESHOLD) if actual_dur else 0.0
 
         return sid, {
@@ -150,6 +149,8 @@ def run_stage3_tts(project_dir: Path, target_lang: str, voice_config: dict, log_
             "extend_by": round(extend_by, 3),
         }
 
+    import cancel_flag
+    project_name = project_dir.name
     completed = 0
     with ThreadPoolExecutor(max_workers=TTS_WORKERS) as pool:
         futures = {pool.submit(process, i): i for i in pending}
@@ -160,6 +161,10 @@ def run_stage3_tts(project_dir: Path, target_lang: str, voice_config: dict, log_
             if completed % 10 == 0 or completed == len(pending):
                 log_fn(f"    TTS progress: {completed}/{len(pending)}")
                 dub_path.write_text(json.dumps(dub_state, ensure_ascii=False, indent=2), encoding="utf-8")
+            if cancel_flag.is_cancelled(project_name):
+                log_fn(f"    TTS cancelled after {completed}/{len(pending)} segments.")
+                pool.shutdown(wait=False, cancel_futures=True)
+                break
 
     dub_path.write_text(json.dumps(dub_state, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -181,20 +186,54 @@ def run_stage3_tts(project_dir: Path, target_lang: str, voice_config: dict, log_
     log_fn(f"=== Stage 3 complete — {extends} freeze-frame segments, {errors} errors ===")
 
 
-def _generate_tts(text: str, voice: str, audio_file: str) -> bool:
-    """Generate TTS via edge-tts (free Microsoft neural voices) and save to file."""
-    import asyncio
-    import edge_tts
+def _adjust_audio_tempo(audio_file: str, target_dur: float, actual_dur: float) -> float:
+    """Stretch or compress audio to fit target_dur using FFmpeg atempo (±30% max)."""
+    if actual_dur <= 0 or target_dur <= 0:
+        return actual_dur
+    ratio = actual_dur / target_dur  # <1 = too short (slow down), >1 = too long (speed up)
+    if abs(ratio - 1.0) < 0.05:     # within 5% — not worth adjusting
+        return actual_dur
+    if not (0.7 <= ratio <= 1.3):   # beyond ±30% — sounds unnatural, skip
+        return actual_dur
+    tmp = audio_file + ".tempo.mp3"
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-i", audio_file,
+         "-filter:a", f"atempo={ratio:.4f}",
+         "-q:a", "2", tmp],
+        capture_output=True,
+    )
+    if result.returncode == 0:
+        os.replace(tmp, audio_file)
+        return _mp3_duration(audio_file)
+    return actual_dur
 
-    async def _run():
-        communicate = edge_tts.Communicate(text, voice)
-        await communicate.save(audio_file)
 
+def _generate_tts(text: str, voice: str, audio_file: str) -> tuple[bool, str]:
+    """Generate TTS via ElevenLabs and save to mp3 file. Returns (ok, error_message)."""
+    import httpx
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+    api_key = os.getenv("ELEVENLABS_API_KEY", "")
+    if not api_key:
+        return False, "ELEVENLABS_API_KEY not set"
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}"
+    headers = {"xi-api-key": api_key, "Content-Type": "application/json"}
+    payload = {
+        "text": text,
+        "model_id": "eleven_multilingual_v2",
+        "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
+    }
     try:
-        asyncio.run(_run())
-        return True
-    except Exception:
-        return False
+        r = httpx.post(url, headers=headers, json=payload, timeout=60.0)
+        if r.status_code != 200:
+            return False, f"HTTP {r.status_code}: {r.text[:200]}"
+        if len(r.content) < 100:
+            return False, f"Response too short ({len(r.content)} bytes) — possible empty audio"
+        with open(audio_file, "wb") as f:
+            f.write(r.content)
+        return True, ""
+    except Exception as e:
+        return False, str(e)
 
 
 def _mp3_duration(path: str) -> float:
@@ -206,7 +245,7 @@ def _mp3_duration(path: str) -> float:
 
 
 def _rewrite_for_timing(
-    client: anthropic.Anthropic,
+    client,
     english: str,
     current: str,
     target: float,
@@ -265,9 +304,9 @@ def _optimize_extends(segments: list, dub_state: dict) -> dict:
 def run_stage4_stitch(project_dir: Path, target_lang: str, log_fn: Callable):
     log_fn("=== Stage 4: STITCH & MUX ===")
 
-    meta = json.loads((project_dir / "metadata.json").read_text())
+    meta = json.loads((project_dir / "metadata.json").read_text(encoding="utf-8-sig"))
     video_path = Path(meta["video_path"])
-    dub_state = json.loads((project_dir / "dub_state.json").read_text())
+    dub_state = json.loads((project_dir / "dub_state.json").read_text(encoding="utf-8-sig"))
     lang_name = LANG_NAMES.get(target_lang, target_lang.lower())
 
     # 4a. Build extended video if any segment needs freeze frames
@@ -318,12 +357,14 @@ def _build_extended_video(
             seg_end = seg["end"]
             extend = seg["extend_by"]
 
-            # Normal playback chunk
+            # Normal playback chunk — re-encode for frame-accurate cuts, strip audio
             normal = tmp / f"n{idx}.mp4"
             subprocess.run(
-                ["ffmpeg", "-y", "-i", str(video_path),
-                 "-ss", str(prev_end), "-to", str(seg_end),
-                 "-c", "copy", str(normal)],
+                ["ffmpeg", "-y", "-ss", str(prev_end),
+                 "-i", str(video_path),
+                 "-to", str(seg_end - prev_end),
+                 "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-an",
+                 str(normal)],
                 capture_output=True, check=True,
             )
             chunks.append(str(normal))
@@ -334,12 +375,12 @@ def _build_extended_video(
             n_frames = max(1, int(extend * fps))
             subprocess.run(
                 ["ffmpeg", "-y",
-                 "-i", str(video_path),
                  "-ss", str(max(0, seg_end - 0.04)),
+                 "-i", str(video_path),
                  "-vframes", "1",
                  "-vf", f"loop={n_frames}:1,settb=AVTB,fps={fps}",
                  "-t", str(extend),
-                 "-c:v", "libx264", "-preset", "fast",
+                 "-c:v", "libx264", "-preset", "fast", "-an",
                  str(freeze)],
                 capture_output=True, check=True,
             )
@@ -349,13 +390,15 @@ def _build_extended_video(
         # Final chunk to end of video
         final_chunk = tmp / "final.mp4"
         subprocess.run(
-            ["ffmpeg", "-y", "-i", str(video_path),
-             "-ss", str(prev_end), "-c", "copy", str(final_chunk)],
+            ["ffmpeg", "-y", "-ss", str(prev_end),
+             "-i", str(video_path),
+             "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-an",
+             str(final_chunk)],
             capture_output=True, check=True,
         )
         chunks.append(str(final_chunk))
 
-        # Concatenate
+        # Concatenate — reset timestamps so each chunk starts where the previous ended
         concat_txt = tmp / "concat.txt"
         concat_txt.write_text("\n".join(f"file '{c}'" for c in chunks))
         result = subprocess.run(

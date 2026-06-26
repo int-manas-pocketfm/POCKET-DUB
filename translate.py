@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-import anthropic
+from argus import make_client
 from deep_translator import GoogleTranslator
 from dotenv import load_dotenv
 import openpyxl
@@ -22,16 +22,14 @@ from openpyxl.utils import get_column_letter
 
 load_dotenv()
 
-ARGUS_API_KEY = os.getenv("ARGUS_API_KEY")
-ARGUS_BASE_URL = os.getenv("ARGUS_BASE_URL", "https://api.anthropic.com")
-ARGUS_MODEL = os.getenv("ARGUS_MODEL", "claude-opus-4-5")
+ARGUS_MODEL = os.getenv("ARGUS_MODEL", "claude-sonnet-4-6")
 
 LANG_NAMES = {
     "de": "German", "fr": "French", "it": "Italian",
     "es": "Spanish", "pt": "Portuguese",
 }
 
-LLM_BATCH_SIZE = 30
+LLM_BATCH_SIZE = 15
 FPS = 25
 
 
@@ -43,6 +41,7 @@ def translate_all(
     target_lang: str,
     existing: dict,
     log_fn: Callable,
+    project_name: str = "",
 ) -> dict:
     translations = {k: dict(v) for k, v in existing.items()}
     google_key = f"google_{target_lang}"
@@ -66,6 +65,11 @@ def translate_all(
                 continue
             try:
                 translated = gt.translate(text)
+                # Fix double-encoding: deep_translator sometimes returns latin-1 bytes decoded as latin-1
+                try:
+                    translated = translated.encode("latin-1").decode("utf-8")
+                except (UnicodeEncodeError, UnicodeDecodeError):
+                    pass
                 if str(i) not in translations:
                     translations[str(i)] = {}
                 translations[str(i)][google_key] = translated
@@ -80,11 +84,39 @@ def translate_all(
     # ── LLM Translation ────────────────────────────────────────────────────────
     if needs_llm:
         log_fn(f"    LLM ({lang_name}): {len(needs_llm)} segments in batches of {LLM_BATCH_SIZE}...")
-        translations = _translate_llm(segments, characters, target_lang, translations, needs_llm, log_fn)
+        translations = _translate_llm(segments, characters, target_lang, translations, needs_llm, log_fn, project_name)
     else:
         log_fn(f"    LLM translations already complete.")
 
     return translations
+
+
+LANG_TO_PROMPT = {
+    "fr": "en_fr", "de": "en_de", "es": "en_es",
+    "pt": "en_pt", "it": "en_it_step1", "hi": "en_hi",
+}
+
+LANG_TO_STEP2_PROMPT = {
+    "it": "en_it_step2",
+}
+
+def _load_translation_prompt(target_lang: str) -> str | None:
+    key = LANG_TO_PROMPT.get(target_lang)
+    if not key:
+        return None
+    prompt_file = Path(__file__).parent / "prompts" / f"{key}.txt"
+    if not prompt_file.exists():
+        return None
+    return prompt_file.read_text(encoding="utf-8-sig")
+
+def _load_step2_prompt(target_lang: str) -> str | None:
+    key = LANG_TO_STEP2_PROMPT.get(target_lang)
+    if not key:
+        return None
+    prompt_file = Path(__file__).parent / "prompts" / f"{key}.txt"
+    if not prompt_file.exists():
+        return None
+    return prompt_file.read_text(encoding="utf-8-sig")
 
 
 def _translate_llm(
@@ -94,15 +126,34 @@ def _translate_llm(
     translations: dict,
     indices: list,
     log_fn: Callable,
+    project_name: str = "",
 ) -> dict:
-    client = anthropic.Anthropic(api_key=ARGUS_API_KEY, base_url=ARGUS_BASE_URL)
+    import cancel_flag
+    client = make_client()
     llm_key = f"llm_{target_lang}"
     lang_name = LANG_NAMES.get(target_lang, target_lang)
     n_batches = (len(indices) + LLM_BATCH_SIZE - 1) // LLM_BATCH_SIZE
 
+    system_prompt = _load_translation_prompt(target_lang)
+    step2_prompt = _load_step2_prompt(target_lang)
+
+    if step2_prompt:
+        log_fn(f"    2-step pipeline active for {lang_name} (Step 1: linguistic, Step 2: Pocket FM creative).")
+        step1_key = f"llm_{target_lang}_step1"
+    elif system_prompt:
+        log_fn(f"    Using detailed {lang_name} adaptation prompt.")
+        step1_key = llm_key
+    else:
+        log_fn(f"    No detailed prompt for '{target_lang}' — using generic.")
+        step1_key = llm_key
+
+    # ── Step 1: Technical / linguistic translation ─────────────────────────────
     for b in range(n_batches):
+        if project_name and cancel_flag.is_cancelled(project_name):
+            log_fn(f"    LLM translation cancelled after {b}/{n_batches} batches.")
+            break
         batch = indices[b * LLM_BATCH_SIZE:(b + 1) * LLM_BATCH_SIZE]
-        log_fn(f"    LLM batch {b + 1}/{n_batches} ({len(batch)} segs)...")
+        log_fn(f"    {'Step 1 ' if step2_prompt else ''}LLM batch {b + 1}/{n_batches} ({len(batch)} segs)...")
 
         lines = []
         for idx in batch:
@@ -112,20 +163,24 @@ def _translate_llm(
             nxt = segments[idx + 1]["text"][:60] if idx < len(segments) - 1 else ""
             lines.append(f"SEG_{idx}|{char}|{seg.get('text','')}|PREV:{prev}|NEXT:{nxt}")
 
-        prompt = (
+        user_content = (
             f"Translate these English dialogue segments to {lang_name}.\n"
-            "Preserve tone, character voice, and natural spoken rhythm.\n"
             f'Return ONLY a JSON object: {{"SEG_N": "<translation>", ...}}\n\n'
             "Segments (format: SEG_N|CHARACTER|TEXT|PREV:context|NEXT:context):\n"
             + "\n".join(lines)
         )
 
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": user_content})
+
+        create_kwargs = {"model": ARGUS_MODEL, "max_tokens": 4096, "messages": messages}
+        if step2_prompt:
+            create_kwargs["temperature"] = 0.2
+
         try:
-            resp = client.messages.create(
-                model=ARGUS_MODEL,
-                max_tokens=4096,
-                messages=[{"role": "user", "content": prompt}],
-            )
+            resp = client.messages.create(**create_kwargs)
             if hasattr(resp, "usage"):
                 log_fn(f"__TOKENS__:{resp.usage.input_tokens}:{resp.usage.output_tokens}")
             raw = resp.content[0].text.strip()
@@ -137,7 +192,7 @@ def _translate_llm(
                         idx = int(key.replace("SEG_", ""))
                         if str(idx) not in translations:
                             translations[str(idx)] = {}
-                        translations[str(idx)][llm_key] = str(val)
+                        translations[str(idx)][step1_key] = str(val)
                     except ValueError:
                         pass
             else:
@@ -146,6 +201,64 @@ def _translate_llm(
             log_fn(f"    LLM batch {b + 1} failed: {exc}")
 
         time.sleep(0.4)
+
+    # ── Step 2: Creative / Pocket FM enhancement (Italian only) ───────────────
+    if step2_prompt:
+        step2_indices = [i for i in indices if step1_key in translations.get(str(i), {})]
+        n2 = (len(step2_indices) + LLM_BATCH_SIZE - 1) // LLM_BATCH_SIZE
+        log_fn(f"    Step 2 (creative): {len(step2_indices)} segs in {n2} batches...")
+
+        for b in range(n2):
+            if project_name and cancel_flag.is_cancelled(project_name):
+                log_fn(f"    Step 2 cancelled after {b}/{n2} batches.")
+                break
+            batch = step2_indices[b * LLM_BATCH_SIZE:(b + 1) * LLM_BATCH_SIZE]
+            log_fn(f"    Step 2 batch {b + 1}/{n2} ({len(batch)} segs)...")
+
+            lines = []
+            for idx in batch:
+                step1_text = translations[str(idx)].get(step1_key, "")
+                lines.append(f"SEG_{idx}: {step1_text}")
+
+            user_content = (
+                f"Enhance these Italian dialogue segments for Pocket FM audio drama style.\n"
+                f'Return ONLY a JSON object: {{"SEG_N": "<enhanced_italian>", ...}}\n\n'
+                "Italian segments to enhance:\n"
+                + "\n".join(lines)
+            )
+
+            messages = [
+                {"role": "system", "content": step2_prompt},
+                {"role": "user", "content": user_content},
+            ]
+
+            try:
+                resp = client.messages.create(
+                    model=ARGUS_MODEL,
+                    max_tokens=4096,
+                    messages=messages,
+                    temperature=0.5,
+                )
+                if hasattr(resp, "usage"):
+                    log_fn(f"__TOKENS__:{resp.usage.input_tokens}:{resp.usage.output_tokens}")
+                raw = resp.content[0].text.strip()
+                m = re.search(r"\{.*\}", raw, re.DOTALL)
+                if m:
+                    result = json.loads(m.group())
+                    for key, val in result.items():
+                        try:
+                            idx = int(key.replace("SEG_", ""))
+                            if str(idx) not in translations:
+                                translations[str(idx)] = {}
+                            translations[str(idx)][llm_key] = str(val)
+                        except ValueError:
+                            pass
+                else:
+                    log_fn(f"    Warning: no JSON found in Step 2 response for batch {b + 1}")
+            except Exception as exc:
+                log_fn(f"    Step 2 batch {b + 1} failed: {exc}")
+
+            time.sleep(0.4)
 
     return translations
 
@@ -161,11 +274,17 @@ def run_stage2_localize(project_dir: Path, csv_path: Path, target_lang: str, log
         log_fn("No valid replacements found in CSV. Stage 2 skipped.")
         return
 
+    # Auto-detect near-match variants (e.g. "Daemon" when table says "Damon")
+    raw_segs = json.loads((project_dir / "segments.json").read_text(encoding="utf-8-sig"))
+    segs = raw_segs.get("merged", raw_segs) if isinstance(raw_segs, dict) else raw_segs
+    seg_texts = [s.get("text", "") for s in segs]
+    replacements = _expand_with_variants(replacements, seg_texts, log_fn)
+
     trans_path = project_dir / "translations.json"
     if not trans_path.exists():
         raise RuntimeError("translations.json not found — run Stage 1 first.")
 
-    translations = json.loads(trans_path.read_text())
+    translations = json.loads(trans_path.read_text(encoding="utf-8-sig"))
     google_key = f"google_{target_lang}"
     llm_key = f"llm_{target_lang}"
     google_local = f"google_{target_lang}_local"
@@ -173,45 +292,153 @@ def run_stage2_localize(project_dir: Path, csv_path: Path, target_lang: str, log
 
     changed = 0
     for sid, trans in translations.items():
+        seg_changed = False
         if google_key in trans:
             trans[google_local] = _apply(trans[google_key], replacements)
+            if trans[google_local] != trans[google_key]:
+                seg_changed = True
         if llm_key in trans:
             trans[llm_local] = _apply(trans[llm_key], replacements)
             if trans[llm_local] != trans[llm_key]:
-                changed += 1
+                seg_changed = True
+        if seg_changed:
+            changed += 1
 
     trans_path.write_text(json.dumps(translations, ensure_ascii=False, indent=2), encoding="utf-8")
     log_fn(f"    Localization applied — {changed} segments changed")
 
     # Regenerate cue sheet
     log_fn("    Regenerating cue sheet...")
-    raw = json.loads((project_dir / "segments.json").read_text())
+    raw = json.loads((project_dir / "segments.json").read_text(encoding="utf-8-sig"))
     segs = raw.get("merged", raw) if isinstance(raw, dict) else raw
-    chars = json.loads((project_dir / "characters_final.json").read_text()) if (project_dir / "characters_final.json").exists() else {}
+    chars = json.loads((project_dir / "characters_final.json").read_text(encoding="utf-8-sig")) if (project_dir / "characters_final.json").exists() else {}
     write_excel(project_dir, segs, translations, chars, target_lang)
     log_fn("=== Stage 2 complete ===")
 
 
 def _load_replacements(csv_path: Path, log_fn: Callable) -> list[tuple[str, str]]:
+    ORIG_KEYS  = {"Original", "original", "Source", "source", "Original Name", "original name"}
+    LOCAL_KEYS = {"Localized", "localized", "Target", "target",
+                  "Localised", "localised", "Localized Name", "localised name", "Localized name"}
+
+    import shutil, tempfile
+    rows = []
+    with open(csv_path, "rb") as _f:
+        _magic = _f.read(4)
+    is_xlsx = _magic[:2] == b"PK" or _magic[:4] == b"\xD0\xCF\x11\xE0"
+    suffix = Path(csv_path).suffix.lower()
+    if is_xlsx or suffix in (".xlsx", ".xls"):
+        # openpyxl validates extension — copy to a tmp .xlsx path if needed
+        if suffix not in (".xlsx", ".xls"):
+            _tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+            _tmp.close()
+            shutil.copy2(csv_path, _tmp.name)
+            _load_path = _tmp.name
+        else:
+            _load_path = str(csv_path)
+        wb = openpyxl.load_workbook(_load_path, read_only=True, data_only=True)
+        ws = wb.active
+        headers = [str(c.value).strip() if c.value else "" for c in next(ws.iter_rows(min_row=1, max_row=1))]
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            rows.append({headers[i]: (str(v).strip() if v is not None else "") for i, v in enumerate(row)})
+        wb.close()
+        if _load_path != str(csv_path):
+            os.unlink(_load_path)
+    else:
+        with open(csv_path, encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
+
+    # Detect which columns to use
+    all_keys = list(rows[0].keys()) if rows else []
+    orig_col  = next((k for k in all_keys if k in ORIG_KEYS),  None)
+    local_col = next((k for k in all_keys if k in LOCAL_KEYS), None)
+
+    # Fallback: skip any "Type" column, use 2nd and 3rd remaining columns
+    if not orig_col or not local_col:
+        non_type = [k for k in all_keys if k.lower() not in ("type", "gender", "is_new",
+                    "is_deleted", "profession", "dialogue_accent", "sentences")]
+        if len(non_type) >= 2:
+            orig_col, local_col = non_type[0], non_type[1]
+            log_fn(f"    Column auto-detected: '{orig_col}' → '{local_col}'")
+
     reps = []
-    with open(csv_path, encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            original = (
-                row.get("Original") or row.get("original") or
-                row.get("Source") or row.get("source") or ""
-            ).strip()
-            localized = (
-                row.get("Localized") or row.get("localized") or
-                row.get("Target") or row.get("target") or ""
-            ).strip()
+    if orig_col and local_col:
+        for row in rows:
+            original  = (row.get(orig_col)  or "").strip()
+            localized = (row.get(local_col) or "").strip()
             if original and localized and original != localized:
                 reps.append((original, localized))
 
-    # Longest-match-first prevents partial substitutions
+    # For multi-word names, also add a first-name-only fallback entry.
+    # e.g. "Damon Blake" → "Enea Neri" also adds "Damon" → "Enea"
+    # so text that uses only first names still gets replaced.
+    existing_sources = {r[0].lower() for r in reps}
+    fallbacks = []
+    for orig, loc in reps:
+        orig_parts = orig.split()
+        loc_parts  = loc.split()
+        if len(orig_parts) > 1 and loc_parts:
+            first_orig = orig_parts[0]
+            first_loc  = loc_parts[0]
+            if (first_orig.lower() not in existing_sources
+                    and first_orig.lower() != first_loc.lower()):
+                fallbacks.append((first_orig, first_loc))
+                existing_sources.add(first_orig.lower())
+    reps.extend(fallbacks)
+
     reps.sort(key=lambda x: len(x[0]), reverse=True)
-    log_fn(f"    Loaded {len(reps)} replacements from CSV")
+    log_fn(f"    Loaded {len(reps)} replacements ({len(fallbacks)} first-name fallbacks added)")
     return reps
+
+
+def _levenshtein(a: str, b: str) -> int:
+    if len(a) < len(b):
+        return _levenshtein(b, a)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for ca in a:
+        curr = [prev[0] + 1]
+        for j, cb in enumerate(b):
+            curr.append(min(prev[j + 1] + 1, curr[j] + 1, prev[j] + (ca != cb)))
+        prev = curr
+    return prev[-1]
+
+
+def _expand_with_variants(
+    replacements: list[tuple[str, str]],
+    seg_texts: list[str],
+    log_fn: Callable,
+) -> list[tuple[str, str]]:
+    """
+    Scan English source segments for capitalized words that differ by ≤1 edit
+    from a known replacement source (e.g. 'Daemon' vs 'Damon').
+    Auto-adds them so transcription misspellings are still localized.
+    """
+    # Collect all capitalized words that appear in the source text
+    cap_words: set[str] = set()
+    for text in seg_texts:
+        cap_words.update(re.findall(r"\b[A-Z][a-z]+\b", text))
+
+    existing_sources = {r[0].lower() for r in replacements}
+    variants: list[tuple[str, str]] = []
+
+    for orig, loc in replacements:
+        for word in cap_words:
+            if word.lower() in existing_sources:
+                continue
+            dist = _levenshtein(orig.lower(), word.lower())
+            # Allow 1 edit for names up to 8 chars, 2 edits for longer
+            max_dist = 1 if len(orig) <= 8 else 2
+            if 0 < dist <= max_dist:
+                variants.append((word, loc))
+                existing_sources.add(word.lower())
+                log_fn(f"    Variant detected: '{word}' ≈ '{orig}' → will map to '{loc}'")
+
+    if variants:
+        replacements = list(replacements) + variants
+        replacements.sort(key=lambda x: len(x[0]), reverse=True)
+    return replacements
 
 
 def _apply(text: str, replacements: list[tuple[str, str]]) -> str:
@@ -230,28 +457,62 @@ def write_excel(
     characters: dict,
     target_lang: str,
 ):
+    import csv as _csv
     lang = LANG_NAMES.get(target_lang, target_lang)
     google_key = f"google_{target_lang}"
     llm_key = f"llm_{target_lang}"
     local_key = f"llm_{target_lang}_local"
     local_google_key = f"google_{target_lang}_local"
 
+    # Load localization mapping using the same robust parser as Stage 2
+    loc_map: dict[str, str] = {}
+    loc_csv = project_dir / "localization.csv"
+    if loc_csv.exists():
+        try:
+            for orig, repl in _load_replacements(loc_csv, lambda _: None):
+                loc_map[orig.lower()] = repl
+        except Exception:
+            pass
+
+    def localize_char(name: str) -> str:
+        # Try full name, then strip _VO suffix, then title-case variant
+        base = name.upper().replace("_VO", "").replace("_", " ").strip()
+        return (
+            loc_map.get(name.lower())
+            or loc_map.get(base.lower())
+            or loc_map.get(name.rstrip("_VO").lower())
+            or name
+        )
+
+    # Load dub state for actual TTS durations
+    dub_state: dict = {}
+    dub_path = project_dir / "dub_state.json"
+    if dub_path.exists():
+        try:
+            import json as _json
+            dub_state = _json.loads(dub_path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            pass
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Cue Sheet"
 
-    HEADER_FILL = PatternFill("solid", fgColor="1E1E2E")
-    RED_FILL = PatternFill("solid", fgColor="FF4444")
-    AMBER_FILL = PatternFill("solid", fgColor="FFAA00")
-    WHITE_BOLD = Font(color="FFFFFF", bold=True)
-    WRAP = Alignment(wrap_text=True, vertical="top")
+    HEADER_FILL  = PatternFill("solid", fgColor="1E1E2E")
+    RED_FILL     = PatternFill("solid", fgColor="FF4444")
+    AMBER_FILL   = PatternFill("solid", fgColor="FFAA00")
+    GREEN_FILL   = PatternFill("solid", fgColor="1A4D2E")
+    WHITE_BOLD   = Font(color="FFFFFF", bold=True)
+    WRAP         = Alignment(wrap_text=True, vertical="top")
+    CENTER_WRAP  = Alignment(wrap_text=True, vertical="top", horizontal="center")
 
     headers = [
         "ID", "Start", "End", "TC In", "TC Out",
-        "Character", "English",
+        "Character", "Character (Localized)", "English",
         f"Google ({lang})", f"LLM ({lang})", f"Localized ({lang})",
+        "Runtime (EN)", f"Runtime ({lang})",
     ]
-    col_widths = [6, 8, 8, 11, 11, 20, 50, 50, 50, 50]
+    col_widths = [6, 9, 9, 14, 14, 18, 18, 50, 50, 50, 50, 14, 14]
 
     for col, (h, w) in enumerate(zip(headers, col_widths), 1):
         cell = ws.cell(row=1, column=col, value=h)
@@ -266,30 +527,40 @@ def write_excel(
     for i, seg in enumerate(segments):
         sid = str(i)
         trans = translations.get(sid, {})
-        char = _get_char(characters, seg, i)
+        char = characters.get(str(i), "?")
+        char_loc = localize_char(char)
         english = seg.get("text", "")
         google = trans.get(google_key, "")
         llm = trans.get(llm_key, "")
         localized = trans.get(local_key) or trans.get(local_google_key, "")
         tc_in = _to_tc(seg["start"])
         tc_out = _to_tc(seg["end"])
+        runtime_en = round(seg["end"] - seg["start"], 2)
+        dub = dub_state.get(sid, {})
+        runtime_loc = round(dub["actual_duration"], 2) if dub.get("actual_duration") else None
 
         row = i + 2
         for col, val in enumerate(
             [i, round(seg["start"], 3), round(seg["end"], 3),
-             tc_in, tc_out, char, english, google, llm, localized], 1
+             tc_in, tc_out, char, char_loc, english, google, llm, localized,
+             runtime_en, runtime_loc], 1
         ):
             cell = ws.cell(row=row, column=col, value=val)
-            cell.alignment = WRAP
+            if col in (4, 5):  # TC In / TC Out — never wrap
+                cell.alignment = Alignment(horizontal="center", vertical="top", wrap_text=False)
+            elif col in (1, 2, 3, 12, 13):
+                cell.alignment = CENTER_WRAP
+            else:
+                cell.alignment = WRAP
+            if col in (12, 13) and val is not None:
+                cell.number_format = "0.00"
 
-        # Color coding based on word-count expansion ratio
-        best = llm or google
-        if english and best:
-            ratio = len(best.split()) / max(1, len(english.split()))
-            fill = RED_FILL if ratio > 1.25 else (AMBER_FILL if ratio > 1.0 else None)
-            if fill:
-                for col in range(8, 11):
-                    ws.cell(row=row, column=col).fill = fill
+        # Color-code runtime columns only
+        if runtime_loc:
+            diff = runtime_loc - runtime_en
+            rt_fill = RED_FILL if diff > 0.5 else (AMBER_FILL if diff > 0.1 else GREEN_FILL)
+            ws.cell(row=row, column=12).fill = rt_fill
+            ws.cell(row=row, column=13).fill = rt_fill
 
     wb.save(project_dir / "cue_sheet_final.xlsx")
 
@@ -297,10 +568,7 @@ def write_excel(
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _get_char(characters: dict, seg: dict, fallback_idx: int) -> str:
-    for src_id in seg.get("source_ids", [fallback_idx]):
-        if str(src_id) in characters:
-            return characters[str(src_id)]
-    return "?"
+    return characters.get(str(fallback_idx), "?")
 
 
 def _to_tc(seconds: float) -> str:
@@ -615,6 +883,7 @@ def write_stage3_review_doc(
 
 
 def _style_cell(cell, font_size, font_color, bg_hex: str, bold_first=False):
+    from docx.shared import Pt
     _set_cell_bg(cell, bg_hex)
     for i, para in enumerate(cell.paragraphs):
         para.paragraph_format.space_before = Pt(2)

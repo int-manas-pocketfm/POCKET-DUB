@@ -40,7 +40,7 @@ def run_stage1(video_path: str, project_dir: Path, target_lang: str, log_fn: Cal
     # ── 1b. Transcribe ────────────────────────────────────────────────────────
     segments_path = project_dir / "segments.json"
     if segments_path.exists():
-        stored = json.loads(segments_path.read_text())
+        stored = json.loads(segments_path.read_text(encoding="utf-8-sig"))
         raw_segments = stored.get("raw", stored) if isinstance(stored, dict) else stored
         log_fn(f"1b. Transcription already exists ({len(raw_segments)} raw segments) — skipping.")
     else:
@@ -50,7 +50,7 @@ def run_stage1(video_path: str, project_dir: Path, target_lang: str, log_fn: Cal
         log_fn(f"    Done → {len(raw_segments)} raw segments")
 
     # ── 1c. Merge sentences ───────────────────────────────────────────────────
-    stored = json.loads(segments_path.read_text())
+    stored = json.loads(segments_path.read_text(encoding="utf-8-sig"))
     if isinstance(stored, dict) and "merged" in stored:
         merged = stored["merged"]
         log_fn(f"1c. Sentence merging already done ({len(merged)} merged segments) — skipping.")
@@ -67,7 +67,7 @@ def run_stage1(video_path: str, project_dir: Path, target_lang: str, log_fn: Cal
     # ── 1d. Detect characters ─────────────────────────────────────────────────
     chars_path = project_dir / "characters_final.json"
     if chars_path.exists():
-        final_chars = json.loads(chars_path.read_text())
+        final_chars = json.loads(chars_path.read_text(encoding="utf-8-sig"))
         log_fn(f"1d. Characters already detected ({len(set(final_chars.values()))} unique) — skipping.")
     else:
         log_fn("1d. Detecting characters (LLM)...")
@@ -100,11 +100,11 @@ def run_stage1(video_path: str, project_dir: Path, target_lang: str, log_fn: Cal
 
     # ── 1e. Translate ─────────────────────────────────────────────────────────
     trans_path = project_dir / "translations.json"
-    existing_trans = json.loads(trans_path.read_text()) if trans_path.exists() else {}
+    existing_trans = json.loads(trans_path.read_text(encoding="utf-8-sig")) if trans_path.exists() else {}
 
     log_fn(f"1e. Translating to {target_lang}...")
     from translate import translate_all
-    translations = translate_all(merged, final_chars, target_lang, existing_trans, log_fn)
+    translations = translate_all(merged, final_chars, target_lang, existing_trans, log_fn, project_name=project_dir.name)
     trans_path.write_text(json.dumps(translations, ensure_ascii=False, indent=2), encoding="utf-8")
     log_fn(f"    Done → {len(translations)} segments translated")
 

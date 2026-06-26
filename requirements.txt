@@ -2,9 +2,13 @@ fastapi
 uvicorn[standard]
 python-dotenv
 anthropic
+openai
 deep-translator
 faster-whisper
 edge-tts
+elevenlabs
+httpx
+python-docx
 numpy
 pydub
 openpyxl

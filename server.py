@@ -53,7 +53,7 @@ def _load_json(path: Path) -> dict | list | None:
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8-sig"))
     except (UnicodeDecodeError, ValueError):
         try:
             return json.loads(path.read_text(encoding="latin-1"))
@@ -71,7 +71,7 @@ def _load_metadata(name: str) -> dict:
 
 def _ensure_job(name: str) -> dict:
     if name not in _jobs:
-        _jobs[name] = {"status": "idle", "stage": None, "queue": queue.Queue()}
+        _jobs[name] = {"status": "idle", "stage": None, "queue": queue.Queue(), "cancelled": False}
     return _jobs[name]
 
 
@@ -79,6 +79,9 @@ def _run_in_thread(fn, name: str, stage: int, *args):
     job = _ensure_job(name)
     job["status"] = "running"
     job["stage"] = stage
+    job["cancelled"] = False
+    import cancel_flag
+    cancel_flag.clear(name)
 
     def log(msg: str):
         job["queue"].put({"type": "log", "message": msg})
@@ -86,11 +89,13 @@ def _run_in_thread(fn, name: str, stage: int, *args):
     def worker():
         try:
             fn(*args, log_fn=log)
-            job["status"] = "done"
-            job["queue"].put({"type": "done", "message": f"Stage {stage} complete"})
+            if not job["cancelled"]:
+                job["status"] = "done"
+                job["queue"].put({"type": "done", "message": f"Stage {stage} complete"})
         except Exception as exc:
-            job["status"] = "error"
-            job["queue"].put({"type": "error", "message": str(exc)})
+            if not job["cancelled"]:
+                job["status"] = "error"
+                job["queue"].put({"type": "error", "message": str(exc)})
 
     threading.Thread(target=worker, daemon=True).start()
 
@@ -112,6 +117,7 @@ def _stage_flags(d: Path, meta: dict) -> dict:
         "stage2_done": has_local,
         "stage3_done": tts_done,
         "stage4_done": bool(final_videos),
+        "final_video": final_videos[0].name if final_videos else None,
     }
 
 
@@ -191,6 +197,19 @@ async def delete_project(name: str):
     if name in _jobs:
         del _jobs[name]
     return {"status": "deleted"}
+
+
+@app.post("/api/projects/{name}/cancel")
+async def cancel_job(name: str):
+    job = _jobs.get(name, {})
+    if job.get("status") != "running":
+        raise HTTPException(status_code=400, detail="No running job to cancel")
+    import cancel_flag
+    cancel_flag.set_cancel(name)
+    job["cancelled"] = True
+    job["status"] = "cancelled"
+    job["queue"].put({"type": "error", "message": "Cancelled by user"})
+    return {"status": "cancelled"}
 
 
 # ── Routes: stage execution ────────────────────────────────────────────────────
@@ -305,7 +324,7 @@ async def stream_logs(name: str, request: Request):
                 if msg.get("type") in ("done", "error"):
                     break
             except queue.Empty:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.03)
 
     return EventSourceResponse(generator())
 
@@ -328,11 +347,7 @@ async def get_segments(name: str):
     result = []
     for i, seg in enumerate(segments):
         sid = str(i)
-        char = "?"
-        for src_id in seg.get("source_ids", [i]):
-            if str(src_id) in characters:
-                char = characters[str(src_id)]
-                break
+        char = characters.get(str(i), "?")
         result.append({
             "id": i,
             "start": seg["start"],
@@ -353,7 +368,7 @@ async def update_segment(name: str, seg_id: int, request: Request):
         raise HTTPException(status_code=404, detail="No translations found — run Stage 1 first")
 
     body = await request.json()
-    translations = json.loads(trans_path.read_text())
+    translations = json.loads(trans_path.read_text(encoding="utf-8-sig"))
     sid = str(seg_id)
     if sid not in translations:
         translations[sid] = {}
@@ -373,7 +388,7 @@ async def regenerate_tts(name: str, seg_id: int):
         raise HTTPException(status_code=404, detail="No dub state — run Stage 3 first")
 
     # Mark segment as pending so Stage 3 will re-process it
-    dub_state = json.loads(dub_path.read_text())
+    dub_state = json.loads(dub_path.read_text(encoding="utf-8-sig"))
     dub_state[str(seg_id)] = {"status": "pending"}
     dub_path.write_text(json.dumps(dub_state, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -381,7 +396,7 @@ async def regenerate_tts(name: str, seg_id: int):
     vc_path = d / "voice_config.json"
     if not vc_path.exists():
         raise HTTPException(status_code=400, detail="voice_config.json not found — re-run Stage 3 first")
-    voice_config = json.loads(vc_path.read_text())
+    voice_config = json.loads(vc_path.read_text(encoding="utf-8-sig"))
 
     _ensure_job(name)
     from dub import run_stage3_tts
@@ -392,12 +407,19 @@ async def regenerate_tts(name: str, seg_id: int):
 # ── Routes: file access ────────────────────────────────────────────────────────
 
 @app.get("/api/projects/{name}/files/{filename:path}")
-async def get_file(name: str, filename: str):
+async def get_file(name: str, filename: str, download: bool = False):
     d = _project_dir(name)
     path = d / filename
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"File '{filename}' not found")
-    return FileResponse(path)
+    suffix = path.suffix.lower()
+    # Video files served inline so the browser player works; ?download=1 forces named download
+    if suffix in (".mp4", ".webm", ".ogg", ".mov") and not download:
+        return FileResponse(path)
+    stem = path.stem
+    safe_project = name.replace(" ", "_")
+    download_name = f"{safe_project}__{stem}{suffix}"
+    return FileResponse(path, filename=download_name)
 
 
 @app.get("/api/projects/{name}/characters")
@@ -410,6 +432,34 @@ async def get_characters(name: str):
             counts = Counter(data.values())
             return {"characters": dict(counts), "map": data}
     return {"characters": {}, "map": {}}
+
+
+@app.get("/api/projects/{name}/name-candidates")
+async def get_name_candidates(name: str):
+    """Extract likely character names from English source text (capitalized mid-sentence words)."""
+    import re as _re
+    from collections import Counter as _Counter
+    d = _project_dir(name)
+    raw = _load_json(d / "segments.json")
+    if not raw:
+        return {"names": []}
+    segs = raw.get("merged", raw) if isinstance(raw, dict) else raw
+
+    word_counts: _Counter = _Counter()
+    for seg in segs:
+        text = seg.get("text", "")
+        # Find capitalized words that are NOT at the start of the sentence
+        words = _re.findall(r"(?<=[.!?]\s{0,5}|\s)[A-Z][a-z]{1,}", text)
+        # Also find consecutive capitalized words (full names like "Damon Blake")
+        full_names = _re.findall(r"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)+\b", text)
+        for w in words:
+            word_counts[w] += 1
+        for fn in full_names:
+            word_counts[fn] += 2  # weight full names higher
+
+    # Return names appearing more than once, sorted by frequency
+    candidates = [w for w, c in word_counts.most_common(100) if c > 1 and len(w) > 2]
+    return {"names": candidates}
 
 
 @app.get("/api/projects/{name}/dub-state")
