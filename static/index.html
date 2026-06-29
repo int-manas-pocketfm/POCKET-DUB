@@ -880,7 +880,7 @@
             Target Language
           </div>
           <div class="lang-grid">
-            <template x-for="l in [{v:'it',flag:'🇮🇹',name:'Italian'},{v:'de',flag:'🇩🇪',name:'German'},{v:'fr',flag:'🇫🇷',name:'French'},{v:'es',flag:'🇪🇸',name:'Spanish'},{v:'pt',flag:'🇧🇷',name:'Portuguese'}]" :key="l.v">
+            <template x-for="l in [{v:'it',flag:'🇮🇹',name:'Italian'},{v:'de',flag:'🇩🇪',name:'German'},{v:'fr',flag:'🇫🇷',name:'French'},{v:'es',flag:'🇪🇸',name:'Spanish'},{v:'pt',flag:'🇧🇷',name:'Portuguese'},{v:'hi',flag:'🇮🇳',name:'Hindi'}]" :key="l.v">
               <div class="lang-btn" :class="newProject.target_lang===l.v?'active':''"
                    @click="newProject.target_lang=l.v">
                 <div class="lang-flag" x-text="l.flag"></div>

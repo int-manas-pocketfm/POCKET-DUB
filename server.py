@@ -40,6 +40,7 @@ LANG_NAMES = {
     "it": "Italian",
     "es": "Spanish",
     "pt": "Portuguese",
+    "hi": "Hindi",
 }
 
 
