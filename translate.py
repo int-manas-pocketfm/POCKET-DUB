@@ -522,12 +522,14 @@ def write_excel(
     ws = wb.active
     ws.title = "Cue Sheet"
 
-    HEADER_FILL  = PatternFill("solid", fgColor="1E1E2E")
-    TITLE_FILL   = PatternFill("solid", fgColor="12122A")
-    STATS_FILL   = PatternFill("solid", fgColor="1A1A35")
-    RED_FILL     = PatternFill("solid", fgColor="FF4444")
-    AMBER_FILL   = PatternFill("solid", fgColor="FFAA00")
-    GREEN_FILL   = PatternFill("solid", fgColor="1A4D2E")
+    HEADER_FILL      = PatternFill("solid", fgColor="1E1E2E")
+    TITLE_FILL       = PatternFill("solid", fgColor="12122A")
+    STATS_FILL       = PatternFill("solid", fgColor="1A1A35")
+    RED_FILL         = PatternFill("solid", fgColor="FF4444")   # overrun > 0.5s
+    AMBER_FILL       = PatternFill("solid", fgColor="FFAA00")   # overrun 0.1–0.5s
+    GREEN_FILL       = PatternFill("solid", fgColor="1A4D2E")   # within ±0.1s
+    AMBER_UNDER_FILL = PatternFill("solid", fgColor="6B4E00")   # underrun 0.1–0.5s
+    BLUE_FILL        = PatternFill("solid", fgColor="1A3A5C")   # underrun > 0.5s
     WHITE_BOLD   = Font(color="FFFFFF", bold=True)
     WRAP         = Alignment(wrap_text=True, vertical="top")
     CENTER_WRAP  = Alignment(wrap_text=True, vertical="top", horizontal="center")
@@ -604,10 +606,19 @@ def write_excel(
             if col in (10, 11) and val is not None:
                 cell.number_format = "0.00"
 
-        # Color-code runtime columns only
+        # Color-code runtime columns: overrun = red/amber, underrun = blue/dark-amber, on-time = green
         if runtime_loc:
             diff = runtime_loc - runtime_en
-            rt_fill = RED_FILL if diff > 0.5 else (AMBER_FILL if diff > 0.1 else GREEN_FILL)
+            if diff > 0.5:
+                rt_fill = RED_FILL
+            elif diff > 0.1:
+                rt_fill = AMBER_FILL
+            elif diff > -0.1:
+                rt_fill = GREEN_FILL
+            elif diff > -0.5:
+                rt_fill = AMBER_UNDER_FILL
+            else:
+                rt_fill = BLUE_FILL
             ws.cell(row=row, column=10).fill = rt_fill
             ws.cell(row=row, column=11).fill = rt_fill
 

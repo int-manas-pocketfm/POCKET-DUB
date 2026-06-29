@@ -1510,6 +1510,14 @@
               <span x-text="timingStats.ttsOver"></span>
               <span style="opacity:.75;">over</span>
             </button>
+            <!-- Under — clickable filter -->
+            <button @click="ttsFilter = ttsFilter==='under' ? '' : 'under'"
+                    :style="ttsFilter==='under' ? 'background:rgba(79,158,255,.15);border-color:var(--blue);color:var(--blue);' : 'border-color:rgba(79,158,255,.35);color:var(--blue);background:transparent;'"
+                    style="display:flex;align-items:center;gap:5px;border:1px solid;border-radius:999px;padding:.2rem .75rem;cursor:pointer;transition:all .15s;font-size:.68rem;font-weight:700;">
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--blue);flex-shrink:0;"></span>
+              <span x-text="timingStats.ttsUnder"></span>
+              <span style="opacity:.75;">under</span>
+            </button>
             <!-- Regen All Edited -->
             <button @click="regenEdited()"
                     style="display:flex;align-items:center;gap:5px;border:1px solid rgba(255,107,53,.35);border-radius:999px;padding:.2rem .75rem;cursor:pointer;background:transparent;transition:all .15s;color:var(--orange);font-size:.68rem;font-weight:700;"
@@ -1908,9 +1916,11 @@ function app() {
         segs = segs.filter(s => s.character?.toLowerCase().includes(f) || s.text?.toLowerCase().includes(f));
       }
       if (this.ttsFilter === 'ontime') {
-        segs = segs.filter(s => s.dub?.status === 'done' && (s.dub.actual_duration || 0) <= (s.end - s.start) + 0.3);
+        segs = segs.filter(s => s.dub?.status === 'done' && Math.abs((s.dub.actual_duration || 0) - (s.end - s.start)) <= 0.1);
       } else if (this.ttsFilter === 'over') {
-        segs = segs.filter(s => s.dub?.status === 'done' && (s.dub.actual_duration || 0) > (s.end - s.start) + 0.3);
+        segs = segs.filter(s => s.dub?.status === 'done' && (s.dub.actual_duration || 0) > (s.end - s.start) + 0.1);
+      } else if (this.ttsFilter === 'under') {
+        segs = segs.filter(s => s.dub?.status === 'done' && (s.dub.actual_duration || 0) > 0 && (s.dub.actual_duration || 0) < (s.end - s.start) - 0.1);
       }
       return segs;
     },
@@ -2146,11 +2156,12 @@ function app() {
       const red   = segs.filter(s => this.wordRatio(s) > 1.25).length;
       const avg   = segs.reduce((a, s) => a + this.wordRatio(s), 0) / segs.length;
       const ttsDone = this.segments.filter(s => s.dub?.status === 'done');
-      const ttsOver = ttsDone.filter(s => (s.dub.actual_duration || 0) > (s.dub.target_duration || 0) + 0.3).length;
+      const ttsOver  = ttsDone.filter(s => (s.dub.actual_duration || 0) > (s.end - s.start) + 0.1).length;
+      const ttsUnder = ttsDone.filter(s => (s.dub.actual_duration || 0) > 0 && (s.dub.actual_duration || 0) < (s.end - s.start) - 0.1).length;
       const fmtTime = s => { const m = Math.floor(s/60), sec = Math.round(s%60); return `${m}:${String(sec).padStart(2,'0')}`; };
       const rtEN  = this.segments.reduce((a, s) => a + (s.end - s.start), 0);
       const rtLang = ttsDone.reduce((a, s) => a + (s.dub.actual_duration || 0), 0);
-      return { ok, amber, red, avg, total: segs.length, ttsTotal: ttsDone.length, ttsOver,
+      return { ok, amber, red, avg, total: segs.length, ttsTotal: ttsDone.length, ttsOver, ttsUnder,
                rtEN: fmtTime(rtEN), rtLang: fmtTime(rtLang), rtRatio: rtEN > 0 ? rtLang/rtEN : 1 };
     },
 
