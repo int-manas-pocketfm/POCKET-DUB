@@ -494,11 +494,37 @@ def write_excel(
         except Exception:
             pass
 
+    # Read project name from metadata
+    try:
+        import json as _json2
+        _meta = _json2.loads((project_dir / "metadata.json").read_text(encoding="utf-8"))
+        project_name = _meta.get("name", project_dir.name)
+    except Exception:
+        project_name = project_dir.name
+
+    # Pre-calculate total runtimes for summary header
+    def _fmt_rt(secs: float) -> str:
+        m, s = divmod(int(secs), 60)
+        h, m = divmod(m, 60)
+        if h:
+            return f"{h}:{m:02d}:{s:02d}"
+        return f"{m}:{s:02d}"
+
+    total_en = sum(seg["end"] - seg["start"] for seg in segments)
+    total_loc = sum(
+        dub_state.get(str(i), {}).get("actual_duration", 0) or 0
+        for i in range(len(segments))
+    )
+
+    NUM_COLS = 11
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Cue Sheet"
 
     HEADER_FILL  = PatternFill("solid", fgColor="1E1E2E")
+    TITLE_FILL   = PatternFill("solid", fgColor="12122A")
+    STATS_FILL   = PatternFill("solid", fgColor="1A1A35")
     RED_FILL     = PatternFill("solid", fgColor="FF4444")
     AMBER_FILL   = PatternFill("solid", fgColor="FFAA00")
     GREEN_FILL   = PatternFill("solid", fgColor="1A4D2E")
@@ -506,24 +532,48 @@ def write_excel(
     WRAP         = Alignment(wrap_text=True, vertical="top")
     CENTER_WRAP  = Alignment(wrap_text=True, vertical="top", horizontal="center")
 
+    col_widths = [6, 14, 14, 18, 18, 50, 50, 50, 50, 14, 14]
+
+    # ── Row 1: Show name ────────────────────────────────────────────────────────
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=NUM_COLS)
+    title_cell = ws.cell(row=1, column=1, value=project_name.upper())
+    title_cell.fill = TITLE_FILL
+    title_cell.font = Font(color="FF6B35", bold=True, size=13)
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 26
+
+    # ── Row 2: Runtime summary ──────────────────────────────────────────────────
+    rt_ratio = total_loc / total_en if total_en > 0 and total_loc > 0 else None
+    ratio_str = f"  ({rt_ratio:.2f}×)" if rt_ratio else ""
+    stats_val = (
+        f"Runtime EN: {_fmt_rt(total_en)}    │    "
+        f"Runtime {lang}: {_fmt_rt(total_loc) if total_loc else '—'}{ratio_str}    │    "
+        f"Lines: {len(segments)}"
+    )
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=NUM_COLS)
+    stats_cell = ws.cell(row=2, column=1, value=stats_val)
+    stats_cell.fill = STATS_FILL
+    stats_cell.font = Font(color="AAAACC", bold=False, size=10)
+    stats_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[2].height = 18
+
+    # ── Row 3: Column headers ───────────────────────────────────────────────────
     headers = [
-        "ID", "Start", "End", "TC In", "TC Out",
+        "ID", "TC In", "TC Out",
         "Character", "Character (Localized)", "English",
         f"Google ({lang})", f"LLM ({lang})", f"Localized ({lang})",
         "Runtime (EN)", f"Runtime ({lang})",
     ]
-    col_widths = [6, 9, 9, 14, 14, 18, 18, 50, 50, 50, 50, 14, 14]
-
     for col, (h, w) in enumerate(zip(headers, col_widths), 1):
-        cell = ws.cell(row=1, column=col, value=h)
+        cell = ws.cell(row=3, column=col, value=h)
         cell.fill = HEADER_FILL
         cell.font = WHITE_BOLD
         cell.alignment = Alignment(horizontal="center", vertical="center")
         ws.column_dimensions[get_column_letter(col)].width = w
+    ws.freeze_panes = "A4"
+    ws.row_dimensions[3].height = 20
 
-    ws.freeze_panes = "A2"
-    ws.row_dimensions[1].height = 20
-
+    # ── Rows 4+: Data ───────────────────────────────────────────────────────────
     for i, seg in enumerate(segments):
         sid = str(i)
         trans = translations.get(sid, {})
@@ -539,28 +589,27 @@ def write_excel(
         dub = dub_state.get(sid, {})
         runtime_loc = round(dub["actual_duration"], 2) if dub.get("actual_duration") else None
 
-        row = i + 2
+        row = i + 4  # shifted down by 3 (2 summary rows + 1 header row)
         for col, val in enumerate(
-            [i, round(seg["start"], 3), round(seg["end"], 3),
-             tc_in, tc_out, char, char_loc, english, google, llm, localized,
+            [i, tc_in, tc_out, char, char_loc, english, google, llm, localized,
              runtime_en, runtime_loc], 1
         ):
             cell = ws.cell(row=row, column=col, value=val)
-            if col in (4, 5):  # TC In / TC Out — never wrap
+            if col in (2, 3):
                 cell.alignment = Alignment(horizontal="center", vertical="top", wrap_text=False)
-            elif col in (1, 2, 3, 12, 13):
+            elif col in (1, 10, 11):
                 cell.alignment = CENTER_WRAP
             else:
                 cell.alignment = WRAP
-            if col in (12, 13) and val is not None:
+            if col in (10, 11) and val is not None:
                 cell.number_format = "0.00"
 
         # Color-code runtime columns only
         if runtime_loc:
             diff = runtime_loc - runtime_en
             rt_fill = RED_FILL if diff > 0.5 else (AMBER_FILL if diff > 0.1 else GREEN_FILL)
-            ws.cell(row=row, column=12).fill = rt_fill
-            ws.cell(row=row, column=13).fill = rt_fill
+            ws.cell(row=row, column=10).fill = rt_fill
+            ws.cell(row=row, column=11).fill = rt_fill
 
     wb.save(project_dir / "cue_sheet_final.xlsx")
 

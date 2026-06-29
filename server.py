@@ -19,6 +19,9 @@ from sse_starlette.sse import EventSourceResponse
 
 import os
 
+# Allow large multipart uploads (python-multipart default is 1 MB per field)
+os.environ.setdefault("MULTIPART_MAX_SIZE", str(10 * 1024 * 1024 * 1024))
+
 BASE_DIR = Path(__file__).parent
 # Vercel has a read-only filesystem except /tmp
 OUTPUT_DIR = Path("/tmp/dubstudio") if os.getenv("VERCEL") else BASE_DIR / "output"
@@ -109,7 +112,10 @@ def _stage_flags(d: Path, meta: dict) -> dict:
         for v in trans.values()
     )
     dub = _load_json(d / "dub_state.json") or {}
-    tts_done = bool(dub) and all(s.get("status") == "done" for s in dub.values())
+    tts_done = bool(dub) and all(
+        s.get("status") == "done" or not s.get("translated_text", "").strip()
+        for s in dub.values()
+    )
     final_videos = list(d.glob(f"*_{lang}.mp4"))
 
     return {
@@ -144,6 +150,44 @@ async def list_projects():
     return result
 
 
+@app.post("/api/projects/link")
+async def create_project_from_path(request: Request):
+    """Create a project by pointing to an existing local file — no browser upload."""
+    data = await request.json()
+    name = (data.get("name") or "").strip()
+    target_lang = (data.get("target_lang") or "de").strip()
+    video_path = (data.get("video_path") or "").strip()
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Project name is required")
+    if not video_path:
+        raise HTTPException(status_code=400, detail="Video path is required")
+
+    path = Path(video_path)
+    if not path.exists():
+        raise HTTPException(status_code=400, detail=f"File not found: {video_path}")
+    if not path.is_file():
+        raise HTTPException(status_code=400, detail=f"Not a file: {video_path}")
+
+    project_dir = OUTPUT_DIR / name
+    if project_dir.exists():
+        raise HTTPException(status_code=400, detail=f"Project '{name}' already exists")
+    project_dir.mkdir(parents=True)
+
+    meta = {
+        "name": name,
+        "video_path": str(path.resolve()),
+        "video_filename": path.name,
+        "target_lang": target_lang,
+        "target_lang_name": LANG_NAMES.get(target_lang, target_lang),
+        "source_lang": "en",
+        "fps": 25,
+        "created_at": datetime.now().isoformat(),
+    }
+    (project_dir / "metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return meta
+
+
 @app.post("/api/projects")
 async def create_project(
     name: str = Form(...),
@@ -158,7 +202,8 @@ async def create_project(
 
     video_path = project_dir / video.filename
     with open(video_path, "wb") as f:
-        f.write(await video.read())
+        while chunk := await video.read(1024 * 1024):  # 1 MB chunks
+            f.write(chunk)
 
     meta = {
         "name": name,
@@ -404,6 +449,77 @@ async def regenerate_tts(name: str, seg_id: int):
     return {"status": "started", "segment": seg_id}
 
 
+@app.post("/api/projects/{name}/regen-edited")
+async def regen_edited(name: str):
+    meta = _load_metadata(name)
+    _assert_idle(name)
+    d = OUTPUT_DIR / name
+
+    dub_path = d / "dub_state.json"
+    if not dub_path.exists():
+        raise HTTPException(status_code=400, detail="No dub state — run Stage 3 first")
+
+    vc_path = d / "voice_config.json"
+    if not vc_path.exists():
+        raise HTTPException(status_code=400, detail="voice_config.json not found — re-run Stage 3 first")
+
+    dub_state = json.loads(dub_path.read_text(encoding="utf-8-sig"))
+    translations = _load_json(d / "translations.json") or {}
+    lang = meta["target_lang"]
+
+    reset_count = 0
+    for sid, dub in dub_state.items():
+        if dub.get("status") != "done":
+            continue
+        trans = translations.get(sid, {})
+        # Only regen if we have a source_text baseline (set since the fix was applied)
+        # Without it we can't tell what was manually edited vs timing-rewritten
+        if not dub.get("source_text"):
+            continue
+        current = (trans.get(f"llm_{lang}_local") or trans.get(f"llm_{lang}") or
+                   trans.get(f"google_{lang}_local") or trans.get(f"google_{lang}") or "").strip()
+        tts_text = dub.get("source_text", "").strip()
+        if current and current != tts_text:
+            dub_state[sid]["status"] = "pending"
+            reset_count += 1
+
+    if reset_count == 0:
+        return {"status": "nothing_to_regen", "reset": 0}
+
+    dub_path.write_text(json.dumps(dub_state, ensure_ascii=False, indent=2), encoding="utf-8")
+    voice_config = json.loads(vc_path.read_text(encoding="utf-8-sig"))
+    _ensure_job(name)
+    from dub import run_stage3_tts
+    _run_in_thread(run_stage3_tts, name, 3, d, lang, voice_config)
+    return {"status": "started", "reset": reset_count}
+
+
+# ── Routes: cue sheet re-export ───────────────────────────────────────────────
+
+@app.post("/api/projects/{name}/export-cue-sheet")
+async def export_cue_sheet(name: str):
+    d = _project_dir(name)
+    meta = _load_metadata(name)
+
+    segs_path = d / "segments.json"
+    trans_path = d / "translations.json"
+    chars_path = d / "characters_final.json"
+
+    if not segs_path.exists():
+        raise HTTPException(status_code=400, detail="No segments — run Stage 1 first")
+    if not trans_path.exists():
+        raise HTTPException(status_code=400, detail="No translations — run Stage 1 first")
+
+    segs_raw = json.loads(segs_path.read_text(encoding="utf-8-sig"))
+    segments = segs_raw.get("merged", segs_raw) if isinstance(segs_raw, dict) else segs_raw
+    translations = json.loads(trans_path.read_text(encoding="utf-8-sig"))
+    characters = json.loads(chars_path.read_text(encoding="utf-8-sig")) if chars_path.exists() else {}
+
+    from translate import write_excel
+    write_excel(d, segments, translations, characters, meta["target_lang"])
+    return {"status": "ok"}
+
+
 # ── Routes: file access ────────────────────────────────────────────────────────
 
 @app.get("/api/projects/{name}/files/{filename:path}")
@@ -415,7 +531,7 @@ async def get_file(name: str, filename: str, download: bool = False):
     suffix = path.suffix.lower()
     # Video files served inline so the browser player works; ?download=1 forces named download
     if suffix in (".mp4", ".webm", ".ogg", ".mov") and not download:
-        return FileResponse(path)
+        return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     stem = path.stem
     safe_project = name.replace(" ", "_")
     download_name = f"{safe_project}__{stem}{suffix}"
@@ -474,4 +590,5 @@ async def get_dub_state(name: str):
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=8501, reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=8501, reload=True,
+                h11_max_incomplete_event_size=10 * 1024 * 1024 * 1024)

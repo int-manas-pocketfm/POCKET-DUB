@@ -92,7 +92,8 @@ def run_stage3_tts(project_dir: Path, target_lang: str, voice_config: dict, log_
                 break
 
         if not text:
-            return sid, {"status": "error", "error": "No translation text available"}
+            return sid, {"status": "done", "english": seg.get("text", ""), "translated_text": "",
+                         "start": seg["start"], "end": seg["end"], "skipped": True}
 
         # Pick voice — characters_final.json is keyed by merged segment index
         char = chars.get(str(i), "UNKNOWN")
@@ -137,6 +138,7 @@ def run_stage3_tts(project_dir: Path, target_lang: str, voice_config: dict, log_
         return sid, {
             "status": "done",
             "english": english,
+            "source_text": text,
             "translated_text": current_text,
             "character": char,
             "voice": voice_id,
@@ -254,13 +256,13 @@ def _rewrite_for_timing(
     prev: str,
     nxt: str,
 ) -> str | None:
+    import re as _re
     direction = "shorter" if actual > target else "longer"
     max_words = len(current.split())
     prompt = (
         f"Rewrite this {lang_name} subtitle to be {direction} "
         f"to fit in {target:.1f}s (current TTS is {actual:.1f}s).\n"
-        f"Preserve meaning. Do NOT exceed {max_words} words. "
-        "Return ONLY the rewritten text.\n\n"
+        f"Preserve meaning. Do NOT exceed {max_words} words.\n\n"
         f"English: {english}\n"
         f"Current {lang_name}: {current}\n"
         f"Context before: {prev}\n"
@@ -269,10 +271,20 @@ def _rewrite_for_timing(
     try:
         resp = client.messages.create(
             model=ARGUS_MODEL,
-            max_tokens=256,
-            messages=[{"role": "user", "content": prompt}],
+            max_tokens=120,
+            system="You rewrite subtitles. Output ONLY the rewritten subtitle — one line, no explanation, no alternatives, no markdown.",
+            messages=[
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": ""},
+            ],
         )
-        return resp.content[0].text.strip().strip('"')
+        raw = resp.content[0].text.strip()
+        # Extract first clean line (no markdown, no reasoning)
+        lines = [l.strip() for l in raw.splitlines() if l.strip()]
+        result = lines[0] if lines else raw
+        # Strip markdown bold/italic
+        result = _re.sub(r'\*+', '', result).strip().strip('"').strip()
+        return result or None
     except Exception:
         return None
 

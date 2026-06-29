@@ -849,7 +849,7 @@
 
       <!-- Back + title -->
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:2.2rem;">
-        <button @click="view='home'; newProject={name:'',target_lang:'it',videoFile:null}; if($refs.videoFileInput) $refs.videoFileInput.value=''"
+        <button @click="view='home'; newProject={name:'',target_lang:'it',videoFile:null,videoMode:'upload',localPath:''}; if($refs.videoFileInput) $refs.videoFileInput.value=''"
                 style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:.38rem .7rem;font-size:.8rem;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;flex-shrink:0;"
                 onmouseenter="this.style.borderColor='rgba(255,107,53,.4)';this.style.color='var(--orange)'"
                 onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">← Back</button>
@@ -896,39 +896,68 @@
             <span class="create-label-num">3</span>
             Video File
           </div>
-          <div class="drop-zone" :class="newProject.videoFile?'has-file':''"
-               @click="$refs.videoFileInput.click()">
-            <input type="file" accept="video/*" x-ref="videoFileInput"
-                   @change="newProject.videoFile = $event.target.files[0]"
-                   style="display:none;" />
-            <template x-if="!newProject.videoFile">
-              <div>
-                <div style="font-size:1.6rem;opacity:.35;margin-bottom:6px;">🎬</div>
-                <p style="font-size:.82rem;font-weight:600;color:var(--muted);">Click to choose a video file</p>
-                <p style="font-size:.7rem;color:var(--dim);margin-top:3px;">MP4, MOV, MKV, AVI…</p>
-              </div>
-            </template>
-            <template x-if="newProject.videoFile">
-              <div style="display:flex;align-items:center;gap:10px;justify-content:center;">
-                <span style="font-size:1.2rem;">✅</span>
-                <div style="text-align:left;">
-                  <p style="font-size:.82rem;font-weight:700;color:var(--text);" x-text="newProject.videoFile.name"></p>
-                  <p style="font-size:.68rem;color:var(--dim);margin-top:2px;" x-text="(newProject.videoFile.size/1024/1024).toFixed(1)+' MB'"></p>
+
+          <!-- Mode toggle -->
+          <div style="display:flex;gap:6px;margin-bottom:10px;">
+            <button type="button" @click="newProject.videoMode='upload'"
+                    :style="newProject.videoMode==='upload' ? 'background:rgba(255,107,53,.15);border-color:var(--orange);color:var(--orange);' : 'background:transparent;border-color:var(--border2);color:var(--muted);'"
+                    style="border:1.5px solid;border-radius:8px;padding:.28rem .85rem;font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;">
+              Upload File
+            </button>
+            <button type="button" @click="newProject.videoMode='path'"
+                    :style="newProject.videoMode==='path' ? 'background:rgba(255,107,53,.15);border-color:var(--orange);color:var(--orange);' : 'background:transparent;border-color:var(--border2);color:var(--muted);'"
+                    style="border:1.5px solid;border-radius:8px;padding:.28rem .85rem;font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;">
+              Local Path
+            </button>
+          </div>
+
+          <!-- Upload mode -->
+          <div x-show="newProject.videoMode==='upload'">
+            <div class="drop-zone" :class="newProject.videoFile?'has-file':''"
+                 @click="$refs.videoFileInput.click()">
+              <input type="file" accept="video/*" x-ref="videoFileInput"
+                     @change="newProject.videoFile = $event.target.files[0]"
+                     style="display:none;" />
+              <template x-if="!newProject.videoFile">
+                <div>
+                  <div style="font-size:1.6rem;opacity:.35;margin-bottom:6px;">🎬</div>
+                  <p style="font-size:.82rem;font-weight:600;color:var(--muted);">Click to choose a video file</p>
+                  <p style="font-size:.7rem;color:var(--dim);margin-top:3px;">MP4, MOV, MKV, AVI…</p>
                 </div>
-                <button type="button" @click.stop="newProject.videoFile=null;$refs.videoFileInput.value=''"
-                        style="margin-left:8px;background:none;border:none;color:var(--dim);cursor:pointer;font-size:1rem;"
-                        onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--dim)'">×</button>
-              </div>
-            </template>
+              </template>
+              <template x-if="newProject.videoFile">
+                <div style="display:flex;align-items:center;gap:10px;justify-content:center;">
+                  <span style="font-size:1.2rem;">✅</span>
+                  <div style="text-align:left;">
+                    <p style="font-size:.82rem;font-weight:700;color:var(--text);" x-text="newProject.videoFile.name"></p>
+                    <p style="font-size:.68rem;color:var(--dim);margin-top:2px;" x-text="(newProject.videoFile.size/1024/1024).toFixed(1)+' MB'"></p>
+                  </div>
+                  <button type="button" @click.stop="newProject.videoFile=null;$refs.videoFileInput.value=''"
+                          style="margin-left:8px;background:none;border:none;color:var(--dim);cursor:pointer;font-size:1rem;"
+                          onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--dim)'">×</button>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Local path mode -->
+          <div x-show="newProject.videoMode==='path'">
+            <input x-model="newProject.localPath" class="inp" type="text"
+                   placeholder="e.g. D:\Videos\BTREN0001.mp4"
+                   style="font-size:.88rem;padding:.65rem .85rem;width:100%;" />
+            <p style="font-size:.68rem;color:var(--dim);margin-top:5px;padding-left:2px;">
+              Paste the full file path on this machine. No upload needed — great for large files.
+            </p>
           </div>
         </div>
 
         <!-- CTA -->
         <div style="display:flex;gap:10px;margin-top:.5rem;">
-          <button type="submit" :disabled="creating || !newProject.name || !newProject.videoFile"
+          <button type="submit"
+                  :disabled="creating || !newProject.name || (newProject.videoMode==='upload' ? !newProject.videoFile : !newProject.localPath.trim())"
                   class="btn-primary"
                   style="flex:1;padding:.65rem;font-size:.9rem;font-weight:700;opacity:1;transition:opacity .15s;"
-                  :style="(creating||!newProject.name||!newProject.videoFile)?'opacity:.45;cursor:not-allowed;':''">
+                  :style="(creating||!newProject.name||(newProject.videoMode==='upload'?!newProject.videoFile:!newProject.localPath.trim()))?'opacity:.45;cursor:not-allowed;':''">
             <span x-show="!creating" style="display:inline-flex;align-items:center;gap:6px;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
               Create Project
@@ -1049,12 +1078,18 @@
                       style="width:100%;background:rgba(185,28,28,.12);color:#f87171;border:1px solid rgba(185,28,28,.35);border-radius:8px;padding:.45rem 1rem;font-size:.84rem;font-weight:600;cursor:pointer;">
                 ■  Cancel
               </button>
-              <a x-show="project?.stage1_done"
-                 :href="'/api/projects/'+project?.name+'/files/cue_sheet_final.xlsx'"
-                 class="btn-secondary" style="text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Cue Sheet (.xlsx)
-              </a>
+              <div x-show="project?.stage1_done" style="display:flex;gap:6px;">
+                <button @click="reexportCueSheet()"
+                        class="btn-secondary" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  Re-export
+                </button>
+                <a :href="'/api/projects/'+project?.name+'/files/cue_sheet_final.xlsx'"
+                   class="btn-secondary" style="flex:1;text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Download (.xlsx)
+                </a>
+              </div>
             </div>
 
             <hr class="stage-divider" />
@@ -1376,7 +1411,7 @@
               </div>
               <!-- Video element -->
               <video controls
-                     :src="'/api/projects/'+project?.name+'/files/'+project?.final_video"
+                     :src="'/api/projects/'+project?.name+'/files/'+project?.final_video+'?t='+project?.final_video"
                      style="width:100%;max-height:340px;display:block;background:#000;"
                      x-effect="if(project?.stage4_done && project?.final_video) $el.load()">
                 Your browser does not support the video tag.
@@ -1442,6 +1477,11 @@
           <div style="display:flex;gap:7px;align-items:center;">
             <input x-model="segFilter" class="inp" placeholder="Filter character…" style="width:160px;font-size:.77rem;" />
             <button @click="loadSegments()" class="btn-secondary" style="padding:.34rem .7rem;font-size:.75rem;">↻</button>
+            <button @click="reexportCueSheet()"
+                    class="btn-secondary" style="padding:.34rem .75rem;font-size:.75rem;display:inline-flex;align-items:center;gap:4px;">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Re-export
+            </button>
             <a :href="'/api/projects/'+project?.name+'/files/cue_sheet_final.xlsx'"
                class="btn-secondary" style="padding:.34rem .75rem;font-size:.75rem;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1451,45 +1491,44 @@
         </div>
 
         <!-- Coverage stats bar -->
-        <template x-if="timingStats">
+        <template x-if="timingStats && timingStats.ttsTotal > 0">
           <div style="display:flex;align-items:center;gap:10px;padding:.55rem 1rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;flex-wrap:wrap;row-gap:6px;">
-            <span style="font-size:.63rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;">Word Coverage</span>
-            <div style="width:1px;height:12px;background:var(--border);flex-shrink:0;"></div>
-            <div style="display:flex;align-items:center;gap:4px;">
+            <span style="font-size:.63rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;">TTS</span>
+            <!-- On time — clickable filter -->
+            <button @click="ttsFilter = ttsFilter==='ontime' ? '' : 'ontime'"
+                    :style="ttsFilter==='ontime' ? 'background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green);' : 'border-color:rgba(34,197,94,.35);color:var(--green);background:transparent;'"
+                    style="display:flex;align-items:center;gap:5px;border:1px solid;border-radius:999px;padding:.2rem .75rem;cursor:pointer;transition:all .15s;font-size:.68rem;font-weight:700;">
               <span style="width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;"></span>
-              <span style="font-size:.72rem;color:var(--green);font-weight:700;" x-text="timingStats.ok"></span>
-              <span style="font-size:.65rem;color:var(--dim);">fit</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:4px;">
+              <span x-text="timingStats.ttsTotal - timingStats.ttsOver"></span>
+              <span style="opacity:.75;">on time</span>
+            </button>
+            <!-- Over — clickable filter -->
+            <button @click="ttsFilter = ttsFilter==='over' ? '' : 'over'"
+                    :style="ttsFilter==='over' ? 'background:rgba(251,191,36,.15);border-color:var(--amber);color:var(--amber);' : 'border-color:rgba(251,191,36,.35);color:var(--amber);background:transparent;'"
+                    style="display:flex;align-items:center;gap:5px;border:1px solid;border-radius:999px;padding:.2rem .75rem;cursor:pointer;transition:all .15s;font-size:.68rem;font-weight:700;">
               <span style="width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0;"></span>
-              <span style="font-size:.72rem;color:var(--amber);font-weight:700;" x-text="timingStats.amber"></span>
-              <span style="font-size:.65rem;color:var(--dim);">+0–25%</span>
+              <span x-text="timingStats.ttsOver"></span>
+              <span style="opacity:.75;">over</span>
+            </button>
+            <!-- Regen All Edited -->
+            <button @click="regenEdited()"
+                    style="display:flex;align-items:center;gap:5px;border:1px solid rgba(255,107,53,.35);border-radius:999px;padding:.2rem .75rem;cursor:pointer;background:transparent;transition:all .15s;color:var(--orange);font-size:.68rem;font-weight:700;"
+                    onmouseenter="this.style.background='rgba(255,107,53,.08)';this.style.borderColor='rgba(255,107,53,.6)'"
+                    onmouseleave="this.style.background='transparent';this.style.borderColor='rgba(255,107,53,.35)'">
+              ↺ Regen Edited
+            </button>
+            <!-- Runtime EN vs Lang -->
+            <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0;">
+              <div style="width:1px;height:12px;background:var(--border);flex-shrink:0;"></div>
+              <span style="font-size:.63rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;">Runtime</span>
+              <span style="font-size:.65rem;color:var(--dim);">EN</span>
+              <span style="font-size:.72rem;font-weight:700;font-family:'Cascadia Code','Fira Code',monospace;color:var(--text);" x-text="timingStats.rtEN"></span>
+              <span style="font-size:.65rem;color:var(--border2);">vs</span>
+              <span style="font-size:.65rem;color:var(--dim);" x-text="(project?.target_lang_name || project?.target_lang || '').toUpperCase()"></span>
+              <span style="font-size:.72rem;font-weight:700;font-family:'Cascadia Code','Fira Code',monospace;"
+                    :style="timingStats.rtRatio > 1.2 ? 'color:var(--red)' : timingStats.rtRatio > 1.05 ? 'color:var(--amber)' : 'color:var(--green)'"
+                    x-text="timingStats.rtLang"></span>
             </div>
-            <div style="display:flex;align-items:center;gap:4px;">
-              <span style="width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0;"></span>
-              <span style="font-size:.72rem;color:var(--red);font-weight:700;" x-text="timingStats.red"></span>
-              <span style="font-size:.65rem;color:var(--dim);">&gt;25% over</span>
-            </div>
-            <div style="width:1px;height:12px;background:var(--border);flex-shrink:0;"></div>
-            <span style="font-size:.65rem;color:var(--dim);">avg&nbsp;<span style="font-weight:700;font-family:'Cascadia Code','Fira Code',monospace;"
-              :style="timingStats.avg>1.25?'color:var(--red)':timingStats.avg>1.0?'color:var(--amber)':'color:var(--green)'"
-              x-text="timingStats.avg.toFixed(2)+'×'"></span></span>
-            <template x-if="timingStats.ttsTotal > 0">
-              <div style="display:flex;align-items:center;gap:10px;margin-left:2px;">
-                <div style="width:1px;height:12px;background:var(--border);flex-shrink:0;"></div>
-                <span style="font-size:.63rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;">TTS</span>
-                <div style="display:flex;align-items:center;gap:4px;">
-                  <span style="width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;"></span>
-                  <span style="font-size:.72rem;color:var(--green);font-weight:700;" x-text="timingStats.ttsTotal - timingStats.ttsOver"></span>
-                  <span style="font-size:.65rem;color:var(--dim);">on time</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:4px;">
-                  <span style="width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0;"></span>
-                  <span style="font-size:.72rem;color:var(--amber);font-weight:700;" x-text="timingStats.ttsOver"></span>
-                  <span style="font-size:.65rem;color:var(--dim);">over</span>
-                </div>
-              </div>
-            </template>
           </div>
         </template>
 
@@ -1647,7 +1686,7 @@ function app() {
     get logs() { return this.stageLogs[this.activeStage] || []; },
 
     // Segments (cue sheet)
-    segments: [], segFilter: '', editSeg: null, editText: '',
+    segments: [], segFilter: '', ttsFilter: '', editSeg: null, editText: '',
 
     // Stage 2 localization
     locMode: 'table',
@@ -1659,7 +1698,7 @@ function app() {
 
     // Create project form
     creating: false, createError: '',
-    newProject: { name: '', target_lang: 'it', videoFile: null },
+    newProject: { name: '', target_lang: 'it', videoFile: null, videoMode: 'upload', localPath: '' },
 
     // Confirm dialog
     confirmDialog: { open: false, title: '', message: '', confirmText: 'Confirm', danger: false, _resolve: null },
@@ -1863,11 +1902,17 @@ function app() {
     },
 
     get filteredSegments() {
-      if (!this.segFilter) return this.segments;
-      const f = this.segFilter.toLowerCase();
-      return this.segments.filter(s =>
-        s.character?.toLowerCase().includes(f) || s.text?.toLowerCase().includes(f)
-      );
+      let segs = this.segments;
+      if (this.segFilter) {
+        const f = this.segFilter.toLowerCase();
+        segs = segs.filter(s => s.character?.toLowerCase().includes(f) || s.text?.toLowerCase().includes(f));
+      }
+      if (this.ttsFilter === 'ontime') {
+        segs = segs.filter(s => s.dub?.status === 'done' && (s.dub.actual_duration || 0) <= (s.end - s.start) + 0.3);
+      } else if (this.ttsFilter === 'over') {
+        segs = segs.filter(s => s.dub?.status === 'done' && (s.dub.actual_duration || 0) > (s.end - s.start) + 0.3);
+      }
+      return segs;
     },
 
     // ── Project helpers ───────────────────────────────────────────────────────
@@ -1891,20 +1936,30 @@ function app() {
 
     // ── Create project ────────────────────────────────────────────────────────
     async createProject() {
-      if (!this.newProject.name || !this.newProject.videoFile) {
-        this.createError = 'Project name and video file are required.'; return;
+      const useLocalPath = this.newProject.videoMode === 'path';
+      if (!this.newProject.name || (!useLocalPath && !this.newProject.videoFile) || (useLocalPath && !this.newProject.localPath.trim())) {
+        this.createError = 'Project name and video are required.'; return;
       }
       this.creating = true; this.createError = '';
-      const fd = new FormData();
-      fd.append('name', this.newProject.name);
-      fd.append('target_lang', this.newProject.target_lang);
-      fd.append('video', this.newProject.videoFile);
       try {
-        const r = await fetch('/api/projects', { method: 'POST', body: fd });
+        let r;
+        if (useLocalPath) {
+          r = await fetch('/api/projects/link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: this.newProject.name, target_lang: this.newProject.target_lang, video_path: this.newProject.localPath.trim() }),
+          });
+        } else {
+          const fd = new FormData();
+          fd.append('name', this.newProject.name);
+          fd.append('target_lang', this.newProject.target_lang);
+          fd.append('video', this.newProject.videoFile);
+          r = await fetch('/api/projects', { method: 'POST', body: fd });
+        }
         if (!r.ok) { this.createError = (await r.json()).detail || 'Failed.'; return; }
         await this.loadProjects();
         await this.openProject(this.newProject.name);
-        this.newProject = { name: '', target_lang: 'de', videoFile: null };
+        this.newProject = { name: '', target_lang: 'it', videoFile: null, videoMode: 'upload', localPath: '' };
         if (this.$refs.videoFileInput) this.$refs.videoFileInput.value = '';
       } catch(e) { this.createError = String(e); }
       finally { this.creating = false; }
@@ -2092,7 +2147,11 @@ function app() {
       const avg   = segs.reduce((a, s) => a + this.wordRatio(s), 0) / segs.length;
       const ttsDone = this.segments.filter(s => s.dub?.status === 'done');
       const ttsOver = ttsDone.filter(s => (s.dub.actual_duration || 0) > (s.dub.target_duration || 0) + 0.3).length;
-      return { ok, amber, red, avg, total: segs.length, ttsTotal: ttsDone.length, ttsOver };
+      const fmtTime = s => { const m = Math.floor(s/60), sec = Math.round(s%60); return `${m}:${String(sec).padStart(2,'0')}`; };
+      const rtEN  = this.segments.reduce((a, s) => a + (s.end - s.start), 0);
+      const rtLang = ttsDone.reduce((a, s) => a + (s.dub.actual_duration || 0), 0);
+      return { ok, amber, red, avg, total: segs.length, ttsTotal: ttsDone.length, ttsOver,
+               rtEN: fmtTime(rtEN), rtLang: fmtTime(rtLang), rtRatio: rtEN > 0 ? rtLang/rtEN : 1 };
     },
 
     async saveEdit() {
@@ -2114,6 +2173,28 @@ function app() {
       const r = await fetch(`/api/projects/${this.project.name}/segments/${segId}/regenerate-tts`, { method: 'POST' });
       if (!r.ok) { alert((await r.json()).detail); return; }
       this.project.job_status = 'running';
+      this.streamLogs();
+    },
+
+    async reexportCueSheet() {
+      const r = await fetch(`/api/projects/${this.project.name}/export-cue-sheet`, { method: 'POST' });
+      const data = await r.json();
+      if (!r.ok) { alert(data.detail || 'Export failed'); return; }
+      // Auto-download the freshly regenerated file
+      const a = document.createElement('a');
+      a.href = `/api/projects/${this.project.name}/files/cue_sheet_final.xlsx`;
+      a.click();
+    },
+
+    async regenEdited() {
+      const r = await fetch(`/api/projects/${this.project.name}/regen-edited`, { method: 'POST' });
+      const data = await r.json();
+      if (!r.ok) { alert(data.detail || 'Error'); return; }
+      if (data.status === 'nothing_to_regen') { alert('No edited segments found.'); return; }
+      this.project.job_status = 'running';
+      this.project.job_stage = 3;
+      if (!this.stageLogs[3]) this.stageLogs[3] = [];
+      this.startTimer();
       this.streamLogs();
     },
 
