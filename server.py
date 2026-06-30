@@ -515,7 +515,8 @@ async def import_writer_script(name: str, file: UploadFile = File(...)):
             tmp.write(chunk)
 
     try:
-        wb = _xl.load_workbook(tmp_path, read_only=True, data_only=True)
+        # Load without read_only so numeric IDs aren't lost
+        wb = _xl.load_workbook(tmp_path, data_only=True)
         ws = wb.active
 
         # Detect header row and column positions
@@ -523,36 +524,38 @@ async def import_writer_script(name: str, file: UploadFile = File(...)):
         header_row_idx = None
         for row_idx, row in enumerate(ws.iter_rows(values_only=True), 1):
             row_lower = [str(c).lower().strip() if c else "" for c in row]
-            if "writer" in " ".join(row_lower) or "id" in row_lower:
+            joined = " ".join(row_lower)
+            if "writer" in joined:
                 for ci, val in enumerate(row_lower):
-                    if val == "id":
+                    if val in ("id", "#"):
                         id_col = ci
-                    if "writer script" in val or ("writer" in val and "script" in val):
+                    if "writer" in val and ("script" in val or "approved" in val):
                         writer_col = ci
-                    if "writer feedback" in val or "feedback" in val:
+                    if "feedback" in val:
                         feedback_col = ci
-                if id_col is not None and writer_col is not None:
+                if writer_col is not None:
                     header_row_idx = row_idx
                     break
 
         if writer_col is None:
-            raise HTTPException(status_code=400, detail="Could not find 'Writer Script' column in the uploaded file")
+            raise HTTPException(status_code=400, detail="Could not find a 'Writer Script' or 'Writer approved' column")
 
         translations = json.loads(trans_path.read_text(encoding="utf-8-sig"))
         writer_key = f"writer_{target_lang}"
         feedback_key = f"writer_feedback_{target_lang}"
 
         updated = skipped = 0
-        for row in ws.iter_rows(min_row=(header_row_idx or 3) + 1, values_only=True):
-            # Determine segment ID
-            raw_id = row[id_col] if id_col is not None else row[0]
+        data_start = (header_row_idx or 3) + 1
+        for row_offset, row in enumerate(ws.iter_rows(min_row=data_start, values_only=True)):
+            writer_text = str(row[writer_col]).strip() if row[writer_col] else ""
+            feedback = str(row[feedback_col]).strip() if (feedback_col is not None and row[feedback_col]) else ""
+
+            # Try ID column first, fall back to sequential row offset
+            raw_id = row[id_col] if id_col is not None else None
             try:
                 sid = str(int(float(raw_id)))
             except (TypeError, ValueError):
-                continue
-
-            writer_text = str(row[writer_col]).strip() if row[writer_col] else ""
-            feedback = str(row[feedback_col]).strip() if (feedback_col is not None and row[feedback_col]) else ""
+                sid = str(row_offset)  # fall back to position-based index
 
             if sid not in translations:
                 translations[sid] = {}
