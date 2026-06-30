@@ -1474,9 +1474,19 @@
             <span style="font-size:.7rem;color:var(--muted);background:var(--raised);border:1px solid var(--border);border-radius:20px;padding:.15rem .65rem;font-weight:600;"
                   x-text="segments.length+' segs'"></span>
           </div>
-          <div style="display:flex;gap:7px;align-items:center;">
+          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;">
             <input x-model="segFilter" class="inp" placeholder="Filter character…" style="width:160px;font-size:.77rem;" />
             <button @click="loadSegments()" class="btn-secondary" style="padding:.34rem .7rem;font-size:.75rem;">↻</button>
+            <!-- Import writer script -->
+            <label style="display:inline-flex;align-items:center;gap:4px;padding:.34rem .75rem;font-size:.75rem;cursor:pointer;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.35);color:#22c55e;border-radius:8px;font-weight:600;transition:all .15s;"
+                   onmouseenter="this.style.borderColor='#22c55e'" onmouseleave="this.style.borderColor='rgba(34,197,94,.35)'">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Import Writer
+              <input type="file" accept=".xlsx,.xls" style="display:none;" x-ref="writerFileInput"
+                     @change="importWriterScript($event.target.files[0])" />
+            </label>
+            <span x-show="writerImportMsg" x-text="writerImportMsg"
+                  style="font-size:.72rem;color:var(--green);font-weight:600;"></span>
             <button @click="reexportCueSheet()"
                     class="btn-secondary" style="padding:.34rem .75rem;font-size:.75rem;display:inline-flex;align-items:center;gap:4px;">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -1707,6 +1717,7 @@ function app() {
     // Create project form
     creating: false, createError: '',
     newProject: { name: '', target_lang: 'it', videoFile: null, videoMode: 'upload', localPath: '' },
+    writerImportMsg: '',
 
     // Confirm dialog
     confirmDialog: { open: false, title: '', message: '', confirmText: 'Confirm', danger: false, _resolve: null },
@@ -2185,6 +2196,22 @@ function app() {
       if (!r.ok) { alert((await r.json()).detail); return; }
       this.project.job_status = 'running';
       this.streamLogs();
+    },
+
+    async importWriterScript(file) {
+      if (!file) return;
+      this.writerImportMsg = 'Importing…';
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const r = await fetch(`/api/projects/${this.project.name}/import-writer-script`, { method: 'POST', body: fd });
+        const data = await r.json();
+        if (!r.ok) { this.writerImportMsg = data.detail || 'Import failed'; return; }
+        this.writerImportMsg = `✓ ${data.updated} lines imported`;
+        await this.loadSegments();
+        setTimeout(() => { this.writerImportMsg = ''; }, 4000);
+      } catch(e) { this.writerImportMsg = String(e); }
+      if (this.$refs.writerFileInput) this.$refs.writerFileInput.value = '';
     },
 
     async reexportCueSheet() {

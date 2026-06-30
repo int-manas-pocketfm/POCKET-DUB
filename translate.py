@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 load_dotenv()
 
@@ -516,7 +517,16 @@ def write_excel(
         for i in range(len(segments))
     )
 
-    NUM_COLS = 11
+    NUM_COLS = 13
+    WRITER_KEY = f"writer_{target_lang}"
+    FEEDBACK_OPTIONS = [
+        "No changes",
+        "Writing Style",
+        "Rewrote for timing",
+        "Mistake in localisation",
+        "Grammar / punctuation cleanup",
+        "Character voice",
+    ]
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -525,6 +535,8 @@ def write_excel(
     HEADER_FILL      = PatternFill("solid", fgColor="1E1E2E")
     TITLE_FILL       = PatternFill("solid", fgColor="12122A")
     STATS_FILL       = PatternFill("solid", fgColor="1A1A35")
+    WRITER_FILL      = PatternFill("solid", fgColor="1A2E1A")   # writer script column header
+    FEEDBACK_FILL    = PatternFill("solid", fgColor="1A1A2E")   # writer feedback column header
     RED_FILL         = PatternFill("solid", fgColor="FF4444")   # overrun > 0.5s
     AMBER_FILL       = PatternFill("solid", fgColor="FFAA00")   # overrun 0.1–0.5s
     GREEN_FILL       = PatternFill("solid", fgColor="1A4D2E")   # within ±0.1s
@@ -565,15 +577,30 @@ def write_excel(
         "Character", "Character (Localized)", "English",
         f"Google ({lang})", f"LLM ({lang})", f"Localized ({lang})",
         "Runtime (EN)", f"Runtime ({lang})",
+        f"Writer Script ({lang})", "Writer Feedback",
     ]
+    col_widths = [6, 14, 14, 18, 18, 50, 50, 50, 50, 14, 14, 55, 28]
     for col, (h, w) in enumerate(zip(headers, col_widths), 1):
         cell = ws.cell(row=3, column=col, value=h)
-        cell.fill = HEADER_FILL
-        cell.font = WHITE_BOLD
+        if col == 12:
+            cell.fill = WRITER_FILL
+            cell.font = Font(color="88FF88", bold=True)
+        elif col == 13:
+            cell.fill = FEEDBACK_FILL
+            cell.font = Font(color="AAAAFF", bold=True)
+        else:
+            cell.fill = HEADER_FILL
+            cell.font = WHITE_BOLD
         cell.alignment = Alignment(horizontal="center", vertical="center")
         ws.column_dimensions[get_column_letter(col)].width = w
     ws.freeze_panes = "A4"
     ws.row_dimensions[3].height = 20
+
+    # ── Dropdown validation for Writer Feedback column ──────────────────────────
+    dv_formula = '"' + ','.join(FEEDBACK_OPTIONS) + '"'
+    dv = DataValidation(type="list", formula1=dv_formula, allow_blank=True, showDropDown=False)
+    dv.sqref = f"M4:M{len(segments) + 3}"
+    ws.add_data_validation(dv)
 
     # ── Rows 4+: Data ───────────────────────────────────────────────────────────
     for i, seg in enumerate(segments):
@@ -591,10 +618,13 @@ def write_excel(
         dub = dub_state.get(sid, {})
         runtime_loc = round(dub["actual_duration"], 2) if dub.get("actual_duration") else None
 
+        writer_script = trans.get(WRITER_KEY, "") or ""
+        writer_feedback = trans.get(f"writer_feedback_{target_lang}", "") or ""
+
         row = i + 4  # shifted down by 3 (2 summary rows + 1 header row)
         for col, val in enumerate(
             [i, tc_in, tc_out, char, char_loc, english, google, llm, localized,
-             runtime_en, runtime_loc], 1
+             runtime_en, runtime_loc, writer_script, writer_feedback], 1
         ):
             cell = ws.cell(row=row, column=col, value=val)
             if col in (2, 3):

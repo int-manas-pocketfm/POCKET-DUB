@@ -81,9 +81,10 @@ def run_stage3_tts(project_dir: Path, target_lang: str, voice_config: dict, log_
         sid = str(i)
         trans = translations.get(sid, {})
 
-        # Pick best available translation
+        # Pick best available translation — writer script takes priority
         text = None
         for key in (
+            f"writer_{target_lang}",
             f"llm_{target_lang}_local", f"llm_{target_lang}",
             f"google_{target_lang}_local", f"google_{target_lang}",
         ):

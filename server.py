@@ -495,6 +495,85 @@ async def regen_edited(name: str):
     return {"status": "started", "reset": reset_count}
 
 
+# ── Routes: writer script import ──────────────────────────────────────────────
+
+@app.post("/api/projects/{name}/import-writer-script")
+async def import_writer_script(name: str, file: UploadFile = File(...)):
+    d = _project_dir(name)
+    meta = _load_metadata(name)
+    target_lang = meta["target_lang"]
+
+    trans_path = d / "translations.json"
+    if not trans_path.exists():
+        raise HTTPException(status_code=400, detail="No translations — run Stage 1 first")
+
+    # Save uploaded file to a temp path
+    import tempfile, openpyxl as _xl
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+        tmp_path = tmp.name
+        while chunk := await file.read(1024 * 1024):
+            tmp.write(chunk)
+
+    try:
+        wb = _xl.load_workbook(tmp_path, read_only=True, data_only=True)
+        ws = wb.active
+
+        # Detect header row and column positions
+        writer_col = feedback_col = id_col = None
+        header_row_idx = None
+        for row_idx, row in enumerate(ws.iter_rows(values_only=True), 1):
+            row_lower = [str(c).lower().strip() if c else "" for c in row]
+            if "writer" in " ".join(row_lower) or "id" in row_lower:
+                for ci, val in enumerate(row_lower):
+                    if val == "id":
+                        id_col = ci
+                    if "writer script" in val or ("writer" in val and "script" in val):
+                        writer_col = ci
+                    if "writer feedback" in val or "feedback" in val:
+                        feedback_col = ci
+                if id_col is not None and writer_col is not None:
+                    header_row_idx = row_idx
+                    break
+
+        if writer_col is None:
+            raise HTTPException(status_code=400, detail="Could not find 'Writer Script' column in the uploaded file")
+
+        translations = json.loads(trans_path.read_text(encoding="utf-8-sig"))
+        writer_key = f"writer_{target_lang}"
+        feedback_key = f"writer_feedback_{target_lang}"
+
+        updated = skipped = 0
+        for row in ws.iter_rows(min_row=(header_row_idx or 3) + 1, values_only=True):
+            # Determine segment ID
+            raw_id = row[id_col] if id_col is not None else row[0]
+            try:
+                sid = str(int(float(raw_id)))
+            except (TypeError, ValueError):
+                continue
+
+            writer_text = str(row[writer_col]).strip() if row[writer_col] else ""
+            feedback = str(row[feedback_col]).strip() if (feedback_col is not None and row[feedback_col]) else ""
+
+            if sid not in translations:
+                translations[sid] = {}
+
+            if writer_text:
+                translations[sid][writer_key] = writer_text
+                if feedback:
+                    translations[sid][feedback_key] = feedback
+                updated += 1
+            else:
+                skipped += 1
+
+        trans_path.write_text(json.dumps(translations, ensure_ascii=False, indent=2), encoding="utf-8")
+    finally:
+        import os as _os
+        try: _os.unlink(tmp_path)
+        except Exception: pass
+
+    return {"status": "ok", "updated": updated, "skipped": skipped}
+
+
 # ── Routes: cue sheet re-export ───────────────────────────────────────────────
 
 @app.post("/api/projects/{name}/export-cue-sheet")
